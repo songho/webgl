@@ -1,0 +1,16 @@
+///////////////////////////////////////////////////////////////////////////////
+// TextureType.js
+// ==============
+// enum for texture types
+//
+//  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+// CREATED: 2016-06-24
+// UPDATED: 2023-06-09
+///////////////////////////////////////////////////////////////////////////////
+
+let TextureType = {
+    TEXTURE:   0,
+    NORMALMAP: 1,
+    OCCLUSIONMAP: 2,
+    CUBEMAP: 3
+};
