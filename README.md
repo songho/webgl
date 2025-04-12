@@ -5,4 +5,4 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 2. 
 
 ## License
-All source code in this repository are under the MIT License. Please see the [LICENSE]() for detail.
+All source code in this repository are under the MIT License. Please see the [LICENSE](LICENSE) for detail.
