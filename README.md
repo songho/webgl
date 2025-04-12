@@ -1,4 +1,4 @@
-# WebGL Examples
+# WebGL Libraries & Examples
 This repo contains JavaScript classes and utility functions for WebGL and various WebGL examples.
 
 1. [test_init](https://github.com/songho/webgl/blob/master/test_init.html): WebGL RC (Rendering Context) creation
