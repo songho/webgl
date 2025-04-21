@@ -9,7 +9,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2011-03-01
-// UPDATED: 2024-07-04
+// UPDATED: 2025-04-16
 ///////////////////////////////////////////////////////////////////////////////
 
 // default 1x1 texture data
@@ -317,6 +317,7 @@ function addAttributeLocations(gl, program)
     {
         let info = gl.getActiveAttrib(program, i); // return WebGLActiveInfo
         program.attribute[info.name] = gl.getAttribLocation(program, info.name);
+        gl.enableVertexAttribArray(program.attribute[info.name]);
         //log("ATTRIBUTE: " + info.name + " = " + program.attribute[info.name]);
     }
 }
@@ -324,7 +325,7 @@ function addAttributeLocations(gl, program)
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// assign all GLSL vertexattrib arrays to dummy buffer
+// assign all VAO vertexattrib arrays to dummy buffer
 ///////////////////////////////////////////////////////////////////////////////
 function initVertexAttribArrays(gl)
 {
@@ -337,6 +338,40 @@ function initVertexAttribArrays(gl)
     {
         gl.enableVertexAttribArray(i);
         gl.vertexAttribPointer(i, 4, gl.FLOAT, false, 0, 0);
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// return webgl data type enum value to string
+///////////////////////////////////////////////////////////////////////////////
+function dataTypeToString(type)
+{
+    switch(type)
+    {
+        case 0x1401: return "UNSIGNED_BYTE";
+        case 0x1402: return "SHORT";
+        case 0x1403: return "UNSIGNED_SHORT";
+        case 0x1404: return "INT";
+        case 0x1405: return "UNSIGNED_INT";
+        case 0x1406: return "FLOAT";
+        case 0x8B50: return "FLOAT_VEC2";
+        case 0x8B51: return "FLOAT_VEC3";
+        case 0x8B52: return "FLOAT_VEC4";
+        case 0x8B53: return "INT_VEC2";
+        case 0x8B54: return "INT_VEC3";
+        case 0x8B55: return "INT_VEC4";
+        case 0x8B56: return "BOOL";
+        case 0x8B57: return "BOOL_VEC2";
+        case 0x8B58: return "BOOL_VEC3";
+        case 0x8B59: return "BOOL_VEC4";
+        case 0x8B5A: return "FLOAT_MAT2";
+        case 0x8B5B: return "FLOAT_MAT3";
+        case 0x8B5C: return "FLOAT_MAT4";
+        case 0x8B5E: return "SAMPLER_2D";
+        case 0x8B60: return "SAMPLER_CUBE";
+        default: return "Unknown type";
     }
 }
 

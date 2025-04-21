@@ -22,7 +22,7 @@ let Quad = function(gl, left, right, bottom, top)
     this.right = right || 0.5;
     this.bottom = bottom || -0.5;
     this.top = top || 0.5;
-    this.reversed = false;          // to-to-bottom tex orientation by default
+    this.reversed = false;          // top-to-bottom tex orientation by default
 
     this.vbo = gl.createBuffer();
     this.initVbo();
