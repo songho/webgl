@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- ==========================================================================
+test loading shader in WebGL
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2011-12-16
+UPDATED: 2025-04-16
+===============================================================================
+-->
+
+<head>
+<title>WebGL Shader</title>
+<meta charset="utf-8" />
+<meta name="generator" content="editplus" />
+<meta name="author" content="Song Ho Ahn" />
+<meta name="keywords" content="" />
+<meta name="description" content="" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    box-sizing:border-box;
+}
+p {
+    margin:0 0 1em 0;
+}
+.contentblock {
+    display:flex;
+    position:absolute;
+    left:0px;
+    right:0px;
+    top:0px;
+    bottom:0px;
+    padding:10px;
+    line-height:0;
+}
+.mainblock {
+    position:relative;
+    flex:0 1 300px;
+    border:1px solid #ddd;
+}
+.rightblock {
+    flex:1 0 300px;
+    height:100%;
+    overflow:auto;
+    margin-left:10px;
+    line-height:110%;
+}
+#webglView {
+    width:100%;
+    height:100%;
+}
+#info {
+    position:absolute;
+    top:0;
+    right:0;
+    margin-top:5px;
+    margin-right:5px;
+    line-height:110%;
+}
+hr {
+    height:1px;
+    background-color:#aaa;
+    border:none;
+}
+h3 {
+    margin-bottom:5px;
+}
+.gridbox {
+    display:grid;
+    grid-template-columns:60px 195px;
+    gap:5px;
+    font-size:0.8em;
+}
+.gridcol1 {
+    text-align:right;
+    font-weight:bold;
+}
+.gridcol2 {
+    word-wrap:break-word;
+}
+/* tabs */
+.tabs {
+    display:flex;
+    flex-wrap:wrap;
+    width:100%;
+    background-color:#f8f8f8;
+    box-sizing:border-box;
+    padding:0;
+}
+.tabs input[type=radio] {
+    display:none;
+}
+.tablabel {
+    font-weight:bold;
+    cursor:pointer;
+    padding:10px 20px;
+    color:#666;
+    background-color:#f8f8f8;
+    transition:color 0.2s, background 0.2s;
+    border-top:3px solid transparent;
+    border-left:1px solid transparent;
+    border-right:1px solid transparent;
+    border-bottom:none;
+ }
+.tablabel:hover {
+    color:#000;
+    background-color:#ddd;
+}
+.tabs input:checked + .tablabel {
+    color:#000;
+    background-color:#fff;
+    border-top:2px solid #000;
+    border-left:1px solid #aaa;
+    border-right:1px solid #aaa;
+    border-bottom:1px solid #fff;
+    position:relative;
+    top:1px;
+}
+.tabs .tabcontent {
+    display:none;
+    width:100%;
+    margin:0;
+    padding:10px;
+    border:1px solid #aaa;
+    order:99;
+}
+.tabs input:checked + .tablabel + .tabcontent {
+    display:block;
+    background-color:#fff;
+}
+
+</style>
+
+
+<!-- shader -->
+<script id="vert-flat" type="x-shader/x-vertex">
+// flat shading
+// vertex attributes
+attribute vec3 vertexPosition;
+
+// uniforms
+uniform mat4 matrixModelViewProjection;
+
+void main(void)
+{
+    // transform vertex position from object space to clip space
+    gl_Position = matrixModelViewProjection * vec4(vertexPosition, 1.0);
+}
+</script>
+
+<script id="frag-flat" type="x-shader/x-fragment">
+// flat shading
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+#else
+    precision mediump float;
+#endif
+
+// uniforms
+uniform vec4 materialDiffuse;           // material diffuse color
+
+void main(void)
+{
+    gl_FragColor = materialDiffuse;
+}
+</script>
+
+
+
+<!-- JavaScript -->
+<script src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script src="files/js/webglUtils.js"></script>
+
+<!-- JS -->
+<script type="text/javascript">
+
+// global vars
+let gl = null;
+
+
+///////////////////////////////////////////////////////////////////////////////
+// main entry point
+///////////////////////////////////////////////////////////////////////////////
+document.addEventListener("DOMContentLoaded", () =>
+{
+    let success = initWebGL("webglView");
+    if(!success)
+        return;
+});
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init WebGL
+///////////////////////////////////////////////////////////////////////////////
+function initWebGL(canvasId)
+{
+    try{
+
+    let canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        let node = canvas.parentNode;
+        let message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        node.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                         message +
+                         "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // get gl context
+    gl = getContextGL(canvas)
+    if(!gl)
+    {
+        Logger.show();
+        log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // remember canvas
+    gl.canvas = canvas;
+
+    // init gl and glsl
+    initGL(gl);
+    initGLSL(gl);
+    log("WebGL is initialized.");
+
+    // set background color
+    gl.bgColor = {r:0, g:0, b:0};
+    gl.hue = 0; // red
+
+    // register event handlers
+    window.addEventListener("resize",  handleResize);
+    log("Added window resize envent listener, handleResize().");
+
+    // ready to start rendering loop
+    startRendering(gl);
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+    }
+
+    return true;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// start rendering loop
+///////////////////////////////////////////////////////////////////////////////
+function startRendering(gl)
+{
+    log("\nStarting rendering loop...\n");
+
+    // try to find "requestAnimationFrame" function
+    // if it is not available use setTimeout() instead
+    let requestAnimationFrame = getRequestAnimationFrameFunction(window);
+    let frameCallback = function()
+    {
+        frame();
+        postFrame();
+        requestAnimationFrame(frameCallback);
+    };
+
+    requestAnimationFrame(frameCallback);
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    gl.clearColor(gl.bgColor.r, gl.bgColor.g, gl.bgColor.b, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// post frame
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+    // update hue to rgb
+    gl.hue++; // 0~360
+    if(gl.hue >= 360) gl.hue = 0;
+    let h = (gl.hue / 60) % 6; // 0~360 to 0~6
+    if(h < 1) gl.bgColor = {r:1, g:h, b:0};         // 0
+    else if(h < 2) gl.bgColor = {r:2-h, g:1, b:0};  // 1
+    else if(h < 3) gl.bgColor = {r:0, g:1, b:h-2};  // 2
+    else if(h < 4) gl.bgColor = {r:0, g:4-h, b:1};  // 3
+    else if(h < 5) gl.bgColor = {r:h-4, g:0, b:1};  // 4
+    else gl.bgColor = {r:1, g:0, b:6-h};            // 5
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the canvas is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize()
+{
+    // resize window to fit to parent
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+    //log(gl.canvas.parentNode.clientWidth + "x" + gl.canvas.parentNode.clientHeight);
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    //gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, 0.1, 1000);
+
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL(gl)
+{
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);   // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+    gl.cullFace(gl.BACK);
+
+    handleResize();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL(gl)
+{
+    // create shader objects
+    let vertexShader = loadShaderById(gl, "vert-flat");
+    let fragmentShader = loadShaderById(gl, "frag-flat");
+    if(!vertexShader || !fragmentShader)
+        return;
+
+    // create program object and attach shader objects to it
+    gl.program = gl.createProgram();
+    gl.attachShader(gl.program, vertexShader);
+    gl.attachShader(gl.program, fragmentShader);
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+
+    // link
+    gl.linkProgram(gl.program);
+    if(!gl.getProgramParameter(gl.program, gl.LINK_STATUS))
+    {
+        log("[ERROR] Failed to initialize GLSL: " + gl.getProgramInfoLog(gl.program));
+    }
+
+    gl.useProgram(gl.program);
+
+    // setup attributes
+    gl.program.attribute = {};
+    gl.program.attribute.position = gl.getAttribLocation(gl.program, "vertexPosition");
+    gl.enableVertexAttribArray(gl.program.attribute.position);
+
+    // setup uniforms
+    gl.program.uniform = {};
+    gl.program.uniform.matrixModelViewProjection = gl.getUniformLocation(gl.program, "matrixModelViewProjection");
+    gl.program.uniform.materialDiffuse = gl.getUniformLocation(gl.program, "materialDiffuse");
+
+    // set uniform values
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([1,1,1,1]));
+
+    // load a GLSL shader from files
+    // it will create a shared program and setup attribute/uniform locations
+    // then returns the program async
+    createShaderProgram(gl, "files/glsl/gles_flat.vert", "files/glsl/gles_flat.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // pass uniform values
+        gl.uniform4fv(program.uniform.materialDiffuse, new Float32Array([1,1,1,1]));
+        //log("Passed uniform values to the shader program");
+
+        // remember
+        gl.program = program;
+        displayShaderProgram(gl);
+    });
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+function displayShaderProgram(gl)
+{
+    let shaders = gl.getAttachedShaders(gl.program); // return array of WebGLShader
+    shaders.forEach(shader =>
+    {
+        let type = gl.getShaderParameter(shader, gl.SHADER_TYPE);
+        if(type == gl.VERTEX_SHADER)
+        {
+            let domVert = document.getElementById("tabVert");
+            domVert.innerHTML = "<pre style='white-space:pre-wrap;'>" + gl.getShaderSource(shader) + "</pre>";
+        }
+        else if(type == gl.FRAGMENT_SHADER)
+        {
+            let domFrag = document.getElementById("tabFrag");
+            domFrag.innerHTML = "<pre style='white-space:pre-wrap;'>" + gl.getShaderSource(shader) + "</pre>";
+        }
+    });
+    //let shaderCount = gl.getProgramParameter(gl.program, gl.ATTACHED_SHADERS);
+    //log("SHADER COUNT: " + shaderCount);
+
+    let htmlAttribs = "";
+    // attributes
+    let attribCount = gl.getProgramParameter(gl.program, gl.ACTIVE_ATTRIBUTES);
+    document.getElementById("attribCount").innerText = "(" + attribCount + ")";
+    for(let i = 0; i < attribCount; ++i)
+    {
+        let info = gl.getActiveAttrib(gl.program, i); // return WebGLActiveInfo
+        htmlAttribs +=
+            "<div class=\"gridbox\">" +
+            "<div class=\"gridcol1\">Name:</div>" + "<div class=\"gridcol2\">" + info.name + "</div>" +
+            "<div class=\"gridcol1\">Location:</div>" + "<div class=\"gridcol2\">" + gl.getAttribLocation(gl.program, info.name) + "</div>" +
+            "<div class=\"gridcol1\">Type:</div>" + "<div class=\"gridcol2\">" + dataTypeToString(info.type) + "</div>" +
+            "</div><br>";
+    }
+    let domAttribs = document.getElementById("textAttribs");
+    domAttribs.innerHTML = htmlAttribs;
+
+    let htmlUniforms = "";
+    // uniforms
+    let uniformCount = gl.getProgramParameter(gl.program, gl.ACTIVE_UNIFORMS);
+    document.getElementById("uniformCount").innerText = "(" + uniformCount + ")";
+    for(let i = 0; i < uniformCount; ++i)
+    {
+        let info = gl.getActiveUniform(gl.program, i); // return WebGLActiveInfo
+        htmlUniforms +=
+            "<div class=\"gridbox\">" +
+            "<div class=\"gridcol1\">Name:</div>" + "<div class=\"gridcol2\">" + info.name + "</div>" +
+            //"<div class=\"gridcol1\">Location:</div>" + "<div class=\"gridcol2\">" + gl.getUniformLocation(gl.program, info.name) + "</div>" +
+            "<div class=\"gridcol1\">Type:</div>" + "<div class=\"gridcol2\">" + dataTypeToString(info.type) + "</div>" +
+            "</div><br>";
+            //console.log(gl.getUniformLocation(gl.program, info.name).toString());
+    }
+    let domUniforms = document.getElementById("textUniforms");
+    domUniforms.innerHTML = htmlUniforms;
+}
+
+</script>
+</head>
+
+<body>
+
+<div class="contentblock">
+
+<div class="mainblock">
+<canvas id="webglView" width="300" height="300">
+</canvas>
+</div>
+
+<div class="rightblock">
+<h2>
+WebGL Shader Program
+</h2>
+
+<h3>Shader: gles_flat</h3>
+
+<h3>Attributes <span id="attribCount"></span></h3>
+<div id="textAttribs">
+</div>
+
+<h3>Uniforms <span id="uniformCount"></span></h3>
+<div id="textUniforms">
+</div>
+
+<div class="tabs">
+<!-- tab1 -->
+<input type="radio" name="tabs1" id="tab1" value="tab1" checked>
+<label class="tablabel" for="tab1">Vertex Shader</label>
+<div class="tabcontent" id="tabVert">
+</div>
+<!-- tab2 -->
+<input type="radio" name="tabs1" id="tab2" value="tab2" checked>
+<label class="tablabel" for="tab2">Fragment Shader</label>
+<div class="tabcontent" id="tabFrag">
+</div>
+</div><!-- end of tabs -->
+
+</div>
+<!-- end of rightblock -->
+
+</div> <!-- end of contentblock -->
+</body>
+</html>

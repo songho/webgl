@@ -2,7 +2,7 @@
 <html lang="en">
 
 <!-- ==========================================================================
-test for WebGL 2 (OpenGL ES 3.0)
+test for VBO (Vertex Buffer Object)
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2011-12-16
@@ -11,7 +11,7 @@ UPDATED: 2025-04-08
 -->
 
 <head>
-<title>WebGL Init</title>
+<title>WebGL VBO</title>
 <meta charset="utf-8" />
 <meta name="generator" content="editplus" />
 <meta name="author" content="Song Ho Ahn" />
@@ -46,7 +46,7 @@ p {
     border:1px solid #ddd;
 }
 .rightblock {
-    flex:0 0 400px;
+    flex:0 0 300px;
     height:100%;
     overflow:auto;
     margin-left:10px;
@@ -71,7 +71,7 @@ hr {
 }
 .gridbox {
     display:grid;
-    grid-template-columns:80px 295px;
+    grid-template-columns:80px 195px;
     gap:5px;
     font-size:0.8em;
 }
@@ -85,10 +85,76 @@ hr {
 </style>
 
 
+<!-- shader -->
+<script id="vert-simple" type="x-shader/x-vertex">
+// vertex attributes
+attribute vec3 vertexPosition;          // vertex position
+attribute vec3 vertexNormal;            // vertex normal
+attribute vec4 vertexColor;             // vertex color
+
+// uniforms
+uniform mat4 matrixNormal;              // normal vector transform matrix
+uniform mat4 matrixModelView;           // model-view matrix
+uniform mat4 matrixModelViewProjection; // model-view-projection matrix
+
+// varyings
+varying vec3 positionVec;               // vertex position in eye space
+varying vec3 normalVec;                 // normal vector in eye space
+varying vec4 colorVec;                  // vertex color
+
+void main(void)
+{
+    // transform vertex position from object space to clip space
+    gl_Position = matrixModelViewProjection * vec4(vertexPosition, 1.0);
+
+    // transform the normal vector from object space to eye space
+    // assume vertexNormal is already normalized.
+    normalVec = vec3(matrixNormal * vec4(vertexNormal, 1.0));
+
+    // transform vertex position from object space to eye space
+    positionVec = vec3(matrixModelView * vec4(vertexPosition, 1.0));
+
+    // copy per-vertex color value
+    colorVec = vertexColor;
+}
+</script>
+
+<script id="frag-simple" type="x-shader/x-fragment">
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+#else
+    precision mediump float;
+#endif
+
+// varying variables
+varying vec3 positionVec;               // vertex position in eye space
+varying vec3 normalVec;                 // normal vector in eye space
+varying vec4 colorVec;                  // vertex color
+
+void main(void)
+{
+    // re-normalize varying vars
+    vec3 normal = normalize(normalVec);
+
+    // compute default light vector
+    vec3 light = vec3(0.0, 0.0, 1.0);
+
+    // add color using Lambert cosine law
+    float dotNL = max(dot(normal, light), 0.0);
+    vec3 color = dotNL * colorVec.rgb;
+    //color = normal;
+    
+    gl_FragColor = vec4(color, colorVec.a); // keep original alpha
+}
+</script>
+
+
 
 <!-- JavaScript -->
 <script src="files/js/Logger.js"></script>
 <!-- WebGL libs -->
+<script src="files/js/Vectors.js"></script>
+<script src="files/js/Matrices.js"></script>
 <script src="files/js/Timer.js"></script>
 <script src="files/js/FrameRate.js"></script>
 <script src="files/js/MouseState.js"></script>
@@ -111,7 +177,7 @@ document.addEventListener("DOMContentLoaded", () =>
         return;
 
     // display webgl info to html page
-    displayWebGL(gl);
+    displayHtml(gl);
 });
 
 
@@ -151,14 +217,25 @@ function initWebGL(canvasId)
     // remember canvas
     gl.canvas = canvas;
 
-    // set background color
-    gl.bgColor = {r:0, g:0, b:0};
-    gl.hue = 0; // red
-
     // init gl and glsl
     initGL(gl);
     initGLSL(gl);
     log("WebGL is initialized.");
+
+    // init VBO
+    //    v0
+    //   /  \
+    //  v1---v2
+    gl.v0 = new Vector3(0, 1, 0);       // v0
+    gl.v1 = new Vector3(-1, -1, 0);     // v1
+    gl.v2 = new Vector3(1, -1, 0);      // v2
+    gl.n0 = new Vector3(0, 0, 1);       // n0
+    gl.n1 = new Vector3(0, 0, 1);       // n1
+    gl.n2 = new Vector3(0, 0, 1);       // n2
+    gl.c0 = new Vector4(1, 0, 0, 1);    // c0, red
+    gl.c1 = new Vector4(0, 1, 0, 1);    // c1, green
+    gl.c2 = new Vector4(0, 0, 1, 1);    // c2, blue
+    initVBO(gl);
 
     // add mouse state holder
     gl.mouse = new MouseState();
@@ -236,8 +313,33 @@ function startRendering(gl)
 ///////////////////////////////////////////////////////////////////////////////
 function frame()
 {
-    gl.clearColor(gl.bgColor.r, gl.bgColor.g, gl.bgColor.b, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // tranform matrices
+    gl.matrixView.identity();
+    gl.matrixView.translate(0, 0, -4);
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.matrixNormal = gl.matrixModelView.clone().setTranslation(0, 0, 0);
+
+    // set matrix uniforms
+    gl.useProgram(gl.program);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    // draw triangle
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vbo);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 40, 0);
+    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 40, 3*4);
+    gl.vertexAttribPointer(gl.program.attribute.vertexColor, 4, gl.FLOAT, false, 40, 6*4);
+
+    // draw with vertices
+    //gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // draw using indices
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.ibo);
+    gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_SHORT, 0);
 }
 
 
@@ -247,18 +349,6 @@ function frame()
 ///////////////////////////////////////////////////////////////////////////////
 function postFrame()
 {
-    // update hue to rgb
-    gl.hue += (gl.frameTime / 20); // 0~360
-    if(gl.hue > 360) gl.hue = gl.hue % 360;
-    let h = (gl.hue / 60) % 6; // 0~360 to 0~6
-    //console.log(h);
-    if(h < 1) gl.bgColor = {r:1, g:h, b:0};         // 0
-    else if(h < 2) gl.bgColor = {r:2-h, g:1, b:0};  // 1
-    else if(h < 3) gl.bgColor = {r:0, g:1, b:h-2};  // 2
-    else if(h < 4) gl.bgColor = {r:0, g:4-h, b:1};  // 3
-    else if(h < 5) gl.bgColor = {r:h-4, g:0, b:1};  // 4
-    else gl.bgColor = {r:1, g:0, b:6-h};            // 5
-    //console.log(gl.frameTime);
 }
 
 
@@ -274,7 +364,7 @@ function handleResize()
     //log(gl.canvas.parentNode.clientWidth + "x" + gl.canvas.parentNode.clientHeight);
 
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-    //gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, 0.1, 1000);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, 0.1, 1000);
 
     displayCanvas(gl);
     log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
@@ -472,6 +562,12 @@ function initGL(gl)
     gl.enable(gl.CULL_FACE);    // enable culling backface
     gl.cullFace(gl.BACK);
 
+    // init matrices
+    gl.matrixModel = new Matrix4();
+    gl.matrixView = new Matrix4();
+    gl.matrixProjection = new Matrix4();
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.matrixNormal = gl.matrixModelView.clone().setTranslation(0, 0, 0);
     handleResize();
 }
 
@@ -482,8 +578,87 @@ function initGL(gl)
 ///////////////////////////////////////////////////////////////////////////////
 function initGLSL(gl)
 {
+    // create shader objects
+    let vertexShader = loadShaderById(gl, "vert-simple");
+    let fragmentShader = loadShaderById(gl, "frag-simple");
+    if(!vertexShader || !fragmentShader)
+        return;
+
+    // create program object and attach shader objects to it
+    gl.program = gl.createProgram();
+    gl.attachShader(gl.program, vertexShader);
+    gl.attachShader(gl.program, fragmentShader);
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+
+    // link
+    gl.linkProgram(gl.program);
+    if(gl.getProgramParameter(gl.program, gl.LINK_STATUS))
+    {
+        log("Built GLSL shader program successfully.");
+    }
+    else
+    {
+        log("[ERROR] Failed to initialize GLSL: " + gl.getProgramInfoLog(gl.program));
+    }
+
+    gl.useProgram(gl.program);
+
+    // setup attributes
+    gl.program.attribute = {};
+    gl.program.attribute.vertexPosition = gl.getAttribLocation(gl.program, "vertexPosition");
+    gl.program.attribute.vertexNormal = gl.getAttribLocation(gl.program, "vertexNormal");
+    gl.program.attribute.vertexColor = gl.getAttribLocation(gl.program, "vertexColor");
+    gl.enableVertexAttribArray(gl.program.attribute.vertexPosition);
+    gl.enableVertexAttribArray(gl.program.attribute.vertexNormal);
+    gl.enableVertexAttribArray(gl.program.attribute.vertexColor);
+
+    // setup uniforms
+    gl.program.uniform = {};
+    gl.program.uniform.matrixNormal = gl.getUniformLocation(gl.program, "matrixNormal");
+    gl.program.uniform.matrixModelView = gl.getUniformLocation(gl.program, "matrixModelView");
+    gl.program.uniform.matrixModelViewProjection = gl.getUniformLocation(gl.program, "matrixModelViewProjection");
 }
 
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init VBO & VAO
+///////////////////////////////////////////////////////////////////////////////
+function initVBO(gl)
+{
+    // interleaved vertex data of a triangle: V - N - C
+    let vertices = new Float32Array(3 * 10);
+    let indices = new Uint16Array([0, 1, 2]);   // 0 - 1 - 2
+
+    // v0
+    vertices[0] = gl.v0.x;  vertices[1] = gl.v0.y;  vertices[2] = gl.v0.z;  // position 
+    vertices[3] = gl.n0.x;  vertices[4] = gl.n0.y;  vertices[5] = gl.n0.z;  // normal
+    vertices[6] = gl.c0.x;  vertices[7] = gl.c0.y;  vertices[8] = gl.c0.z;  vertices[9] = gl.c0.w   // color
+
+    // v1
+    vertices[10] = gl.v1.x; vertices[11] = gl.v1.y; vertices[12] = gl.v1.z; // position 
+    vertices[13] = gl.n1.x; vertices[14] = gl.n1.y; vertices[15] = gl.n1.z; // normal
+    vertices[16] = gl.c1.x; vertices[17] = gl.c1.y; vertices[18] = gl.c1.z; vertices[19] = gl.c1.w   // color
+
+    // v2
+    vertices[20] = gl.v2.x; vertices[21] = gl.v2.y; vertices[22] = gl.v2.z;    // position 
+    vertices[23] = gl.n2.x; vertices[24] = gl.n2.y; vertices[25] = gl.n2.z;    // normal
+    vertices[26] = gl.c2.x; vertices[27] = gl.c2.y; vertices[28] = gl.c2.z; vertices[29] = gl.c2.w   // color
+
+    // create vbos
+    gl.vbo = gl.createBuffer();                                 // vbo for vertices
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vbo);                     // bind vbo
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);   // copy data to vbo
+
+    gl.ibo = gl.createBuffer();                                 // vbo for indices
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.ibo);             // bind ibo
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW); // copy data to ibo
+
+    // unbind vbos & vao
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+}
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -505,35 +680,27 @@ function logWebGL(gl)
 
 
 
-function displayWebGL(gl)
+function displayHtml(gl)
 {
-    let version = gl.getParameter(gl.VERSION);
-    let glsl = gl.getParameter(gl.SHADING_LANGUAGE_VERSION);
-    let vendor = gl.getParameter(gl.VENDOR);
-    let renderer = gl.getParameter(gl.RENDERER);
-    let color = "(" + gl.getParameter(gl.RED_BITS) + ", " +
-                gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ")";
-    let depth = gl.getParameter(gl.DEPTH_BITS);
-    let stencil = gl.getParameter(gl.STENCIL_BITS);
-    let extensions = gl.getSupportedExtensions().slice(",");
-
-    document.getElementById("textVersion").innerHTML = version;
-    document.getElementById("textGlsl").innerHTML = glsl;
-    document.getElementById("textVendor").innerHTML = vendor;
-    document.getElementById("textRenderer").innerHTML = renderer;
-    document.getElementById("textColor").innerHTML = color;
-    document.getElementById("textDepth").innerHTML = depth;
-    document.getElementById("textStencil").innerHTML = stencil;
-    extensions.forEach(e =>
-    {
-        document.getElementById("textExtension").innerHTML += e + "<br>";
-    });
+    document.getElementById("textV0").innerHTML = gl.v0;
+    document.getElementById("textN0").innerHTML = gl.n0;
+    document.getElementById("textC0").innerHTML = gl.c0;
+    document.getElementById("textV1").innerHTML = gl.v1;
+    document.getElementById("textN1").innerHTML = gl.n1;
+    document.getElementById("textC1").innerHTML = gl.c1;
+    document.getElementById("textV2").innerHTML = gl.v2;
+    document.getElementById("textN2").innerHTML = gl.n2;
+    document.getElementById("textC2").innerHTML = gl.c2;
 }
 
 function displayCanvas(gl)
 {
     let textCanvas = document.getElementById("textCanvas");
     textCanvas.innerHTML = gl.canvas.width + " x " + gl.canvas.height + " pixels";
+
+    // update projection matrix
+    let textMatrix = document.getElementById("textMatrix");
+    textMatrix.innerHTML = gl.matrixProjection;
 }
 
 function displayMouse(gl)
@@ -560,31 +727,38 @@ function displayMouse(gl)
 <canvas id="webglView" width="300" height="300">
 </canvas>
 <pre id="info">
+<div id="fps">0 FPS</div>
 </pre>
 </div>
 
 <div class="rightblock">
 <h2>
-WebGL
+WebGL VBO
 </h2>
 
 <div class="gridbox">
-<div class="gridcol1">GL Version:</div><div id="textVersion" class="gridcol2"></div>
-<div class="gridcol1">GLSL Version:</div><div id="textGlsl" class="gridcol2"></div>
-<div class="gridcol1">Vendor:</div><div id="textVendor" class="gridcol2"></div>
-<div class="gridcol1">Renderer:</div><div id="textRenderer" class="gridcol2"></div>
-<div class="gridcol1">Color Bits:</div><div id="textColor" class="gridcol2"></div>
-<div class="gridcol1">Depth Bits:</div><div id="textDepth" class="gridcol2"></div>
-<div class="gridcol1">Stencil Bits:</div><div id="textStencil" class="gridcol2"></div>
-<div class="gridcol1">Extensions:</div><div id="textExtension" class="gridcol2"></div>
+<div class="gridcol1">Position 0:</div><div id="textV0" class="gridcol2"></div>
+<div class="gridcol1">Normal 0:</div><div id="textN0" class="gridcol2"></div>
+<div class="gridcol1">Color 0:</div><div id="textC0" class="gridcol2"></div>
+<div class="gridcol1"></div><div class="gridcol2"></div>
+
+<div class="gridcol1">Position 1:</div><div id="textV1" class="gridcol2"></div>
+<div class="gridcol1">Normal 1:</div><div id="textN1" class="gridcol2"></div>
+<div class="gridcol1">Color 1:</div><div id="textC1" class="gridcol2"></div>
+<div class="gridcol1"></div><div class="gridcol2"></div>
+
+<div class="gridcol1">Position 2:</div><div id="textV2" class="gridcol2"></div>
+<div class="gridcol1">Normal 2:</div><div id="textN2" class="gridcol2"></div>
+<div class="gridcol1">Color 2:</div><div id="textC2" class="gridcol2"></div>
+<div class="gridcol1"></div><div class="gridcol2"></div>
 </div>
 
 <hr>
 
 <div class="gridbox">
-<div class="gridcol1">Frame Rate:</div><div id="fps" class="gridcol2">0 FPS</div>
 <div class="gridcol1">Canvas Dimension:</div><div id="textCanvas" class="gridcol2"></div>
 <div class="gridcol1">Mouse Info:</div><div id="textMouse" class="gridcol2"></div>
+<div class="gridcol1">Projection Matrix:</div><pre id="textMatrix" class="gridcol2"></pre>
 </div>
 
 </div>

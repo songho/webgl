@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- ==========================================================================
+test for VBO (Vertex Buffer Object)
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2011-12-16
+UPDATED: 2025-04-08
+===============================================================================
+-->
+
+<head>
+<title>WebGL VBO</title>
+<meta charset="utf-8" />
+<meta name="generator" content="editplus" />
+<meta name="author" content="Song Ho Ahn" />
+<meta name="keywords" content="" />
+<meta name="description" content="" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    box-sizing:border-box;
+}
+p {
+    margin:0 0 1em 0;
+}
+.contentblock {
+    display:flex;
+    position:absolute;
+    left:0px;
+    right:0px;
+    top:0px;
+    bottom:0px;
+    padding:10px;
+    line-height:0;
+}
+.mainblock {
+    position:relative;
+    flex:1 0 300px; /* min 300px */
+    border:1px solid #ddd;
+}
+.rightblock {
+    flex:0 0 300px;
+    height:100%;
+    overflow:auto;
+    margin-left:10px;
+    line-height:110%;
+}
+#webglView {
+    width:100%;
+    height:100%;
+}
+#info {
+    position:absolute;
+    top:0;
+    right:0;
+    margin-top:5px;
+    margin-right:5px;
+    line-height:110%;
+}
+hr {
+    height:1px;
+    background-color:#aaa;
+    border:none;
+}
+.gridbox {
+    display:grid;
+    grid-template-columns:80px 295px;
+    gap:5px;
+    font-size:0.8em;
+}
+.gridcol1 {
+    text-align:right;
+    font-weight:bold;
+}
+.gridcol2 {
+    word-wrap:break-word;
+}
+</style>
+
+
+<!-- shader -->
+<script id="vert-simple" type="x-shader/x-vertex">
+// vertex attributes
+attribute vec3 vertexPosition;          // vertex position
+attribute vec3 vertexNormal;            // vertex normal
+attribute vec4 vertexColor;             // vertex color
+
+// uniforms
+uniform mat4 matrixNormal;              // normal vector transform matrix
+uniform mat4 matrixModelView;           // model-view matrix
+uniform mat4 matrixModelViewProjection; // model-view-projection matrix
+
+// varyings
+varying vec3 positionVec;               // vertex position in eye space
+varying vec3 normalVec;                 // normal vector in eye space
+varying vec4 colorVec;                  // vertex color
+
+void main(void)
+{
+    // transform vertex position from object space to clip space
+    gl_Position = matrixModelViewProjection * vec4(vertexPosition, 1.0);
+
+    // transform the normal vector from object space to eye space
+    // assume vertexNormal is already normalized.
+    normalVec = vec3(matrixNormal * vec4(vertexNormal, 1.0));
+
+    // transform vertex position from object space to eye space
+    positionVec = vec3(matrixModelView * vec4(vertexPosition, 1.0));
+
+    // copy per-vertex color value
+    colorVec = vertexColor;
+}
+</script>
+
+<script id="frag-simple" type="x-shader/x-fragment">
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+#else
+    precision mediump float;
+#endif
+
+// varying variables
+varying vec3 positionVec;               // vertex position in eye space
+varying vec3 normalVec;                 // normal vector in eye space
+varying vec4 colorVec;                  // vertex color
+
+void main(void)
+{
+    // re-normalize varying vars
+    vec3 normal = normalize(normalVec);
+
+    // compute default light vector
+    vec3 light = vec3(0.0, 0.0, 1.0);
+
+    // add color using Lambert cosine law
+    float dotNL = max(dot(normal, light), 0.0);
+    vec3 color = dotNL * colorVec.rgb;
+    //color = normal;
+    
+    gl_FragColor = vec4(color, colorVec.a); // keep original alpha
+}
+</script>
+
+
+
+<!-- JavaScript -->
+<script src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script src="files/js/Vectors.js"></script>
+<script src="files/js/Matrices.js"></script>
+<script src="files/js/webglUtils.js"></script>
+
+<!-- JS -->
+<script type="text/javascript">
+
+// global vars
+let gl = null;
+
+
+///////////////////////////////////////////////////////////////////////////////
+// main entry point
+///////////////////////////////////////////////////////////////////////////////
+document.addEventListener("DOMContentLoaded", () =>
+{
+    let success = initWebGL("webglView");
+    if(!success)
+        return;
+});
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init WebGL
+///////////////////////////////////////////////////////////////////////////////
+function initWebGL(canvasId)
+{
+    try{
+
+    let canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        let node = canvas.parentNode;
+        let message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        node.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                         message +
+                         "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // get gl context v2
+    //gl = canvas.getContext("webgl2");
+    gl = getContextGL(canvas)
+    if(!gl)
+    {
+        Logger.show();
+        log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // remember canvas
+    gl.canvas = canvas;
+
+    // init gl and glsl
+    initGL(gl);
+    initGLSL(gl);
+    log("WebGL is initialized.");
+
+    // init VBO
+    //    v0
+    //   /  \
+    //  v1---v2
+    gl.v0 = new Vector3(0, 1, 0);       // v0
+    gl.v1 = new Vector3(-1, -1, 0);     // v1
+    gl.v2 = new Vector3(1, -1, 0);      // v2
+    gl.n0 = new Vector3(0, 0, 1);       // n0
+    gl.n1 = new Vector3(0, 0, 1);       // n1
+    gl.n2 = new Vector3(0, 0, 1);       // n2
+    gl.c0 = new Vector4(1, 0, 0, 1);    // c0, red
+    gl.c1 = new Vector4(0, 1, 0, 1);    // c1, green
+    gl.c2 = new Vector4(0, 0, 1, 1);    // c2, blue
+    initVBO(gl);
+
+    // init touch states
+    gl.touches = [];
+
+    // register event handlers
+    window.addEventListener("resize",  handleResize);
+    log("Added window resize envent listener, handleResize().");
+
+    // ready to start rendering loop
+    startRendering(gl);
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+    }
+
+    return true;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// start rendering loop
+///////////////////////////////////////////////////////////////////////////////
+function startRendering(gl)
+{
+    log("\nStarting rendering loop...\n");
+
+    // try to find "requestAnimationFrame" function
+    // if it is not available use setTimeout() instead
+    let requestAnimationFrame = getRequestAnimationFrameFunction(window);
+    let frameCallback = function()
+    {
+        frame();
+        postFrame();
+        requestAnimationFrame(frameCallback);
+    };
+
+    requestAnimationFrame(frameCallback);
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // tranform matrices
+    gl.matrixView.identity();
+    gl.matrixView.translate(0, 0, -4);
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.matrixNormal = gl.matrixModelView.clone().setTranslation(0, 0, 0);
+
+    // set matrix uniforms
+    gl.useProgram(gl.program);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    // draw triangle
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vbo);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 40, 0);
+    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 40, 3*4);
+    gl.vertexAttribPointer(gl.program.attribute.vertexColor, 4, gl.FLOAT, false, 40, 6*4);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// post frame
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the canvas is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize()
+{
+    // resize window to fit to parent
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+    //log(gl.canvas.parentNode.clientWidth + "x" + gl.canvas.parentNode.clientHeight);
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, 0.1, 1000);
+
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL(gl)
+{
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);   // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+    gl.cullFace(gl.BACK);
+
+    // init matrices
+    gl.matrixModel = new Matrix4();
+    gl.matrixView = new Matrix4();
+    gl.matrixProjection = new Matrix4();
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.matrixNormal = gl.matrixModelView.clone().setTranslation(0, 0, 0);
+    handleResize();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL(gl)
+{
+    // create shader objects
+    let vertexShader = loadShaderById(gl, "vert-simple");
+    let fragmentShader = loadShaderById(gl, "frag-simple");
+    if(!vertexShader || !fragmentShader)
+        return;
+
+    // create program object and attach shader objects to it
+    gl.program = gl.createProgram();
+    gl.attachShader(gl.program, vertexShader);
+    gl.attachShader(gl.program, fragmentShader);
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+
+    // link
+    gl.linkProgram(gl.program);
+    if(gl.getProgramParameter(gl.program, gl.LINK_STATUS))
+    {
+        log("Built GLSL shader program successfully.");
+    }
+    else
+    {
+        log("[ERROR] Failed to initialize GLSL: " + gl.getProgramInfoLog(gl.program));
+    }
+
+    gl.useProgram(gl.program);
+
+    // setup attributes
+    gl.program.attribute = {};
+    gl.program.attribute.vertexPosition = gl.getAttribLocation(gl.program, "vertexPosition");
+    gl.program.attribute.vertexNormal = gl.getAttribLocation(gl.program, "vertexNormal");
+    gl.program.attribute.vertexColor = gl.getAttribLocation(gl.program, "vertexColor");
+    gl.enableVertexAttribArray(gl.program.attribute.vertexPosition);
+    gl.enableVertexAttribArray(gl.program.attribute.vertexNormal);
+    gl.enableVertexAttribArray(gl.program.attribute.vertexColor);
+
+    // setup uniforms
+    gl.program.uniform = {};
+    gl.program.uniform.matrixNormal = gl.getUniformLocation(gl.program, "matrixNormal");
+    gl.program.uniform.matrixModelView = gl.getUniformLocation(gl.program, "matrixModelView");
+    gl.program.uniform.matrixModelViewProjection = gl.getUniformLocation(gl.program, "matrixModelViewProjection");
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init VBO & VAO
+///////////////////////////////////////////////////////////////////////////////
+function initVBO(gl)
+{
+    // interleaved vertex data of a triangle: V - N - C
+    let vertices = new Float32Array(3 * 10);
+
+    // v0
+    vertices[0] = gl.v0.x;  vertices[1] = gl.v0.y;  vertices[2] = gl.v0.z;  // position 
+    vertices[3] = gl.n0.x;  vertices[4] = gl.n0.y;  vertices[5] = gl.n0.z;  // normal
+    vertices[6] = gl.c0.x;  vertices[7] = gl.c0.y;  vertices[8] = gl.c0.z;  vertices[9] = gl.c0.w   // color
+
+    // v1
+    vertices[10] = gl.v1.x; vertices[11] = gl.v1.y; vertices[12] = gl.v1.z; // position 
+    vertices[13] = gl.n1.x; vertices[14] = gl.n1.y; vertices[15] = gl.n1.z; // normal
+    vertices[16] = gl.c1.x; vertices[17] = gl.c1.y; vertices[18] = gl.c1.z; vertices[19] = gl.c1.w   // color
+
+    // v2
+    vertices[20] = gl.v2.x; vertices[21] = gl.v2.y; vertices[22] = gl.v2.z;    // position 
+    vertices[23] = gl.n2.x; vertices[24] = gl.n2.y; vertices[25] = gl.n2.z;    // normal
+    vertices[26] = gl.c2.x; vertices[27] = gl.c2.y; vertices[28] = gl.c2.z; vertices[29] = gl.c2.w   // color
+
+    // create interleaved vertex buffer
+    gl.vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null); // unbind
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+</script>
+</head>
+
+<body>
+
+<div class="contentblock">
+
+<div class="mainblock">
+<canvas id="webglView" width="300" height="300">
+</canvas>
+</div>
+
+</div> <!-- end of contentblock -->
+</body>
+</html>

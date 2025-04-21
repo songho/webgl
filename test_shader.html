@@ -2,16 +2,16 @@
 <html lang="en">
 
 <!-- ==========================================================================
-test for WebGL 2 (OpenGL ES 3.0)
+test loading shader in WebGL
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2011-12-16
-UPDATED: 2025-04-08
+UPDATED: 2025-04-16
 ===============================================================================
 -->
 
 <head>
-<title>WebGL Init</title>
+<title>WebGL Shader</title>
 <meta charset="utf-8" />
 <meta name="generator" content="editplus" />
 <meta name="author" content="Song Ho Ahn" />
@@ -26,6 +26,9 @@ body {
     padding:0;
     font-family:arial,helvetica,sans-serif;
     box-sizing:border-box;
+}
+h3 {
+    margin-bottom:5px;
 }
 p {
     margin:0 0 1em 0;
@@ -42,11 +45,11 @@ p {
 }
 .mainblock {
     position:relative;
-    flex:1 0 300px; /* min 300px */
+    flex:0 1 300px;
     border:1px solid #ddd;
 }
 .rightblock {
-    flex:0 0 400px;
+    flex:1 0 300px;
     height:100%;
     overflow:auto;
     margin-left:10px;
@@ -71,7 +74,7 @@ hr {
 }
 .gridbox {
     display:grid;
-    grid-template-columns:80px 295px;
+    grid-template-columns:60px 195px;
     gap:5px;
     font-size:0.8em;
 }
@@ -82,7 +85,92 @@ hr {
 .gridcol2 {
     word-wrap:break-word;
 }
+/* tabs */
+.tabs {
+    display:flex;
+    flex-wrap:wrap;
+    width:100%;
+    background-color:#f8f8f8;
+    box-sizing:border-box;
+    padding:0;
+}
+.tabs input[type=radio] {
+    display:none;
+}
+.tablabel {
+    font-weight:bold;
+    cursor:pointer;
+    padding:10px 20px;
+    color:#666;
+    background-color:#f8f8f8;
+    transition:color 0.2s, background 0.2s;
+    border-top:3px solid transparent;
+    border-left:1px solid transparent;
+    border-right:1px solid transparent;
+    border-bottom:none;
+ }
+.tablabel:hover {
+    color:#000;
+    background-color:#ddd;
+}
+.tabs input:checked + .tablabel {
+    color:#000;
+    background-color:#fff;
+    border-top:2px solid #000;
+    border-left:1px solid #aaa;
+    border-right:1px solid #aaa;
+    border-bottom:1px solid #fff;
+    position:relative;
+    top:1px;
+}
+.tabs .tabcontent {
+    display:none;
+    width:100%;
+    margin:0;
+    padding:10px;
+    border:1px solid #aaa;
+    order:99;
+}
+.tabs input:checked + .tablabel + .tabcontent {
+    display:block;
+    background-color:#fff;
+}
+
 </style>
+
+
+<!-- shader -->
+<script id="vert-flat" type="x-shader/x-vertex">
+// flat shading
+// vertex attributes
+attribute vec3 vertexPosition;
+
+// uniforms
+uniform mat4 matrixModelViewProjection;
+
+void main(void)
+{
+    // transform vertex position from object space to clip space
+    gl_Position = matrixModelViewProjection * vec4(vertexPosition, 1.0);
+}
+</script>
+
+<script id="frag-flat" type="x-shader/x-fragment">
+// flat shading
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+#else
+    precision mediump float;
+#endif
+
+// uniforms
+uniform vec4 materialDiffuse;           // material diffuse color
+
+void main(void)
+{
+    gl_FragColor = materialDiffuse;
+}
+</script>
 
 
 
@@ -92,6 +180,9 @@ hr {
 <script src="files/js/Timer.js"></script>
 <script src="files/js/FrameRate.js"></script>
 <script src="files/js/MouseState.js"></script>
+<script src="files/js/Material.js"></script>
+<script src="files/js/Vectors.js"></script>
+<script src="files/js/Matrices.js"></script>
 <script src="files/js/webglUtils.js"></script>
 
 <!-- JS -->
@@ -110,8 +201,7 @@ document.addEventListener("DOMContentLoaded", () =>
     if(!success)
         return;
 
-    // display webgl info to html page
-    displayWebGL(gl);
+    initCombo();
 });
 
 
@@ -137,8 +227,7 @@ function initWebGL(canvasId)
         return false;
     }
 
-    // get gl context v2
-    //gl = canvas.getContext("webgl2");
+    // get gl context
     gl = getContextGL(canvas)
     if(!gl)
     {
@@ -248,7 +337,7 @@ function frame()
 function postFrame()
 {
     // update hue to rgb
-    gl.hue += (gl.frameTime / 20); // 0~360
+    gl.hue += (gl.frameTime / 30); // 0~360
     if(gl.hue > 360) gl.hue = gl.hue % 360;
     let h = (gl.hue / 60) % 6; // 0~360 to 0~6
     //console.log(h);
@@ -274,9 +363,8 @@ function handleResize()
     //log(gl.canvas.parentNode.clientWidth + "x" + gl.canvas.parentNode.clientHeight);
 
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-    //gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, 0.1, 1000);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, 0.1, 1000);
 
-    displayCanvas(gl);
     log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
 }
 
@@ -318,7 +406,6 @@ function handleMouseMove(e)
     {
     }
 
-    displayMouse(gl);
     //log(gl.mouse.toString());
 }
 
@@ -332,8 +419,6 @@ function handleMouseDown(e)
     if(e.button == 2) gl.mouse.rightDown = true;   // secondary
 
     e.preventDefault(); // disable context menu
-
-    displayMouse(gl);
 }
 
 function handleMouseUp(e)
@@ -342,20 +427,16 @@ function handleMouseUp(e)
     if(e.button == 1) gl.mouse.middleDown = false;
     if(e.button == 2) gl.mouse.rightDown = false;
     //e.preventDefault(); // disable context menu
-
-    displayMouse(gl);
 }
 
 function handleMouseOut(e)
 {
     gl.mouse.leftDown = false;
     gl.mouse.rightDown = false;
-    displayMouse(gl);
 }
 
 function handleWheel(e)
 {
-    //log("wheel: " + e.deltaX + ", " + e.deltaY + ", " + e.deltaZ + ", " + e.deltaMode);
     // positive deltaY = wheel down
     // negative deltaY = wheel up
     if(e.deltaY != 0)
@@ -472,7 +553,24 @@ function initGL(gl)
     gl.enable(gl.CULL_FACE);    // enable culling backface
     gl.cullFace(gl.BACK);
 
+    // default material
+    gl.material = new Material(0.8, 0.8, 0.8, 1.0); // with default diffuse
+    gl.material.ambient.set(0.2, 0.2, 0.2, 1.0);
+    gl.material.specular.set(0.2, 0.2, 0.2, 1);
+    gl.material.shininess = 128;
+    log("  Material Ambient: " + gl.material.ambient);
+    log("  Material Diffuse: " + gl.material.diffuse);
+    log(" Material Specualr: " + gl.material.specular);
+    log("Material Shininess: " + gl.material.shininess);
+    log();
+
+    // init matrices
     handleResize();
+    gl.matrixProjection = new Matrix4();
+    gl.matrixModel = new Matrix4();
+    gl.matrixView = new Matrix4();
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
 }
 
 
@@ -482,6 +580,58 @@ function initGL(gl)
 ///////////////////////////////////////////////////////////////////////////////
 function initGLSL(gl)
 {
+    // create shader objects
+    let vertexShader = loadShaderById(gl, "vert-flat");
+    let fragmentShader = loadShaderById(gl, "frag-flat");
+    if(!vertexShader || !fragmentShader)
+        return;
+
+    // create program object and attach shader objects to it
+    gl.program = gl.createProgram();
+    gl.attachShader(gl.program, vertexShader);
+    gl.attachShader(gl.program, fragmentShader);
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+
+    // link
+    gl.linkProgram(gl.program);
+    if(!gl.getProgramParameter(gl.program, gl.LINK_STATUS))
+    {
+        log("[ERROR] Failed to initialize GLSL: " + gl.getProgramInfoLog(gl.program));
+    }
+
+    gl.useProgram(gl.program);
+
+    // setup attributes
+    gl.program.attribute = {};
+    gl.program.attribute.position = gl.getAttribLocation(gl.program, "vertexPosition");
+    gl.enableVertexAttribArray(gl.program.attribute.position);
+
+    // setup uniforms
+    gl.program.uniform = {};
+    gl.program.uniform.matrixModelViewProjection = gl.getUniformLocation(gl.program, "matrixModelViewProjection");
+    gl.program.uniform.materialDiffuse = gl.getUniformLocation(gl.program, "materialDiffuse");
+
+    // set uniform values
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material.getDiffuse());
+
+    /*
+    // load a GLSL shader from files
+    // it will create a shared program and setup attribute/uniform locations
+    // then returns the program async
+    createShaderProgram(gl, "files/glsl/gles_flat.vert", "files/glsl/gles_flat.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // pass uniform values
+        gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
+        //log("Passed uniform values to the shader program");
+
+        // remember
+        gl.program = program;
+        displayShaderProgram(gl);
+    });
+    */
 }
 
 
@@ -505,49 +655,85 @@ function logWebGL(gl)
 
 
 
-function displayWebGL(gl)
+function initCombo()
 {
-    let version = gl.getParameter(gl.VERSION);
-    let glsl = gl.getParameter(gl.SHADING_LANGUAGE_VERSION);
-    let vendor = gl.getParameter(gl.VENDOR);
-    let renderer = gl.getParameter(gl.RENDERER);
-    let color = "(" + gl.getParameter(gl.RED_BITS) + ", " +
-                gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ")";
-    let depth = gl.getParameter(gl.DEPTH_BITS);
-    let stencil = gl.getParameter(gl.STENCIL_BITS);
-    let extensions = gl.getSupportedExtensions().slice(",");
+    let comboShader = document.getElementById("comboShader");
+    comboShader.selectedIndex = 0;
+    comboShader.addEventListener("change", e => loadShader(comboShader.value));
+    loadShader(comboShader.value);
+}
 
-    document.getElementById("textVersion").innerHTML = version;
-    document.getElementById("textGlsl").innerHTML = glsl;
-    document.getElementById("textVendor").innerHTML = vendor;
-    document.getElementById("textRenderer").innerHTML = renderer;
-    document.getElementById("textColor").innerHTML = color;
-    document.getElementById("textDepth").innerHTML = depth;
-    document.getElementById("textStencil").innerHTML = stencil;
-    extensions.forEach(e =>
+function loadShader(shaderName)
+{
+    log("Loading shader " + shaderName + "...");
+    // get file names
+    let vertFile = "files/glsl/" + shaderName + ".vert";
+    let fragFile = "files/glsl/" + shaderName + ".frag";
+
+    // load shaders
+    createShaderProgram(gl, vertFile, fragFile).then(program =>
     {
-        document.getElementById("textExtension").innerHTML += e + "<br>";
+        gl.program = program;
+        gl.useProgram(gl.program);
+        displayShaderProgram(gl);
     });
 }
 
-function displayCanvas(gl)
+function displayShaderProgram(gl)
 {
-    let textCanvas = document.getElementById("textCanvas");
-    textCanvas.innerHTML = gl.canvas.width + " x " + gl.canvas.height + " pixels";
-}
+    let shaders = gl.getAttachedShaders(gl.program); // return array of WebGLShader
+    shaders.forEach(shader =>
+    {
+        let type = gl.getShaderParameter(shader, gl.SHADER_TYPE);
+        if(type == gl.VERTEX_SHADER)
+        {
+            let domVert = document.getElementById("tabVert");
+            domVert.innerHTML = "<pre style='white-space:pre-wrap;'>" + gl.getShaderSource(shader) + "</pre>";
+        }
+        else if(type == gl.FRAGMENT_SHADER)
+        {
+            let domFrag = document.getElementById("tabFrag");
+            domFrag.innerHTML = "<pre style='white-space:pre-wrap;'>" + gl.getShaderSource(shader) + "</pre>";
+        }
+    });
+    //let shaderCount = gl.getProgramParameter(gl.program, gl.ATTACHED_SHADERS);
+    //log("SHADER COUNT: " + shaderCount);
 
-function displayMouse(gl)
-{
-    let textMouse = document.getElementById("textMouse");
-    textMouse.innerHTML = "(" + gl.mouse.x + ", " + gl.mouse.y + ")";
-    if(gl.mouse.leftDown)
-        textMouse.innerHTML += "<br>Left button down";
-    if(gl.mouse.rightDown)
-        textMouse.innerHTML += "<br>Right button down";
-    if(gl.mouse.middleDown)
-        textMouse.innerHTML += "<br>Middle button down";
-}
+    let htmlAttribs = "";
+    // attributes
+    let attribCount = gl.getProgramParameter(gl.program, gl.ACTIVE_ATTRIBUTES);
+    document.getElementById("attribCount").innerText = "(" + attribCount + ")";
+    for(let i = 0; i < attribCount; ++i)
+    {
+        let info = gl.getActiveAttrib(gl.program, i); // return WebGLActiveInfo
+        htmlAttribs +=
+            "<div class=\"gridbox\">" +
+            "<div class=\"gridcol1\">Name:</div>" + "<div class=\"gridcol2\">" + info.name + "</div>" +
+            "<div class=\"gridcol1\">Location:</div>" + "<div class=\"gridcol2\">" + gl.getAttribLocation(gl.program, info.name) + "</div>" +
+            "<div class=\"gridcol1\">Type:</div>" + "<div class=\"gridcol2\">" + dataTypeToString(info.type) + "</div>" +
+            "</div><br>";
+    }
+    let domAttribs = document.getElementById("textAttribs");
+    domAttribs.innerHTML = htmlAttribs;
 
+    let htmlUniforms = "";
+    // uniforms
+    let uniformCount = gl.getProgramParameter(gl.program, gl.ACTIVE_UNIFORMS);
+    document.getElementById("uniformCount").innerText = "(" + uniformCount + ")";
+    for(let i = 0; i < uniformCount; ++i)
+    {
+        let info = gl.getActiveUniform(gl.program, i); // return WebGLActiveInfo
+        htmlUniforms +=
+            "<div class=\"gridbox\">" +
+            "<div class=\"gridcol1\">Name:</div>" + "<div class=\"gridcol2\">" + info.name + "</div>" +
+            //"<div class=\"gridcol1\">Location:</div>" + "<div class=\"gridcol2\">" + gl.getUniformLocation(gl.program, info.name) + "</div>" +
+            "<div class=\"gridcol1\">Type:</div>" + "<div class=\"gridcol2\">" + dataTypeToString(info.type) + "</div>" +
+            "</div><br>";
+            //console.log(gl.getUniformLocation(gl.program, info.name).toString());
+    }
+    let domUniforms = document.getElementById("textUniforms");
+    domUniforms.innerHTML = htmlUniforms;
+}
 
 </script>
 </head>
@@ -560,32 +746,47 @@ function displayMouse(gl)
 <canvas id="webglView" width="300" height="300">
 </canvas>
 <pre id="info">
+<div id="fps">0 FPS</div>
 </pre>
 </div>
 
 <div class="rightblock">
 <h2>
-WebGL
+WebGL Shader Program
 </h2>
 
-<div class="gridbox">
-<div class="gridcol1">GL Version:</div><div id="textVersion" class="gridcol2"></div>
-<div class="gridcol1">GLSL Version:</div><div id="textGlsl" class="gridcol2"></div>
-<div class="gridcol1">Vendor:</div><div id="textVendor" class="gridcol2"></div>
-<div class="gridcol1">Renderer:</div><div id="textRenderer" class="gridcol2"></div>
-<div class="gridcol1">Color Bits:</div><div id="textColor" class="gridcol2"></div>
-<div class="gridcol1">Depth Bits:</div><div id="textDepth" class="gridcol2"></div>
-<div class="gridcol1">Stencil Bits:</div><div id="textStencil" class="gridcol2"></div>
-<div class="gridcol1">Extensions:</div><div id="textExtension" class="gridcol2"></div>
+<label for="comboShader">Select Shader: </label>
+<select id="comboShader">
+<option value="gles_flat" selected>Flat</option>
+<option value="gles_blinn" >Blinn</option>
+<option value="gles_phong">Phong</option>
+<option value="gles_phongTex">Phong + Texture</option>
+<option value="gles_phongTexBump">Phong + Tex + Bump</option>
+<option value="gles_gooch">Gooch</option>
+<option value="gles_sprite">Sprite</option>
+<option value="gles_xray">Xray</option>
+</select>
+
+<h3>Attributes <span id="attribCount"></span></h3>
+<div id="textAttribs">
 </div>
 
-<hr>
-
-<div class="gridbox">
-<div class="gridcol1">Frame Rate:</div><div id="fps" class="gridcol2">0 FPS</div>
-<div class="gridcol1">Canvas Dimension:</div><div id="textCanvas" class="gridcol2"></div>
-<div class="gridcol1">Mouse Info:</div><div id="textMouse" class="gridcol2"></div>
+<h3>Uniforms <span id="uniformCount"></span></h3>
+<div id="textUniforms">
 </div>
+
+<div class="tabs">
+<!-- tab1 -->
+<input type="radio" name="tabs1" id="tab1" value="tab1" checked>
+<label class="tablabel" for="tab1">Vertex Shader</label>
+<div class="tabcontent" id="tabVert">
+</div>
+<!-- tab2 -->
+<input type="radio" name="tabs1" id="tab2" value="tab2" checked>
+<label class="tablabel" for="tab2">Fragment Shader</label>
+<div class="tabcontent" id="tabFrag">
+</div>
+</div><!-- end of tabs -->
 
 </div>
 <!-- end of rightblock -->
