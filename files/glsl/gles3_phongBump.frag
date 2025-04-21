@@ -1,3 +1,5 @@
+#version 300 es
+
 ///////////////////////////////////////////////////////////////////////////////
 // gles_phongBump.frag
 // ===================
@@ -19,7 +21,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2012-01-11
-// UPDATED: 2015-06-04
+// UPDATED: 2025-04-15
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -44,11 +46,14 @@ uniform float materialShininess;        // material specular exponent
 uniform sampler2D map0;                 // normal map
 
 // varying variables
-varying vec3 normalVec;                 // normal vector in eye space
-varying vec3 positionVec;               // vertex position in eye space
-varying vec2 texCoord0;                 // texture coords
-varying vec3 tangentVec;                // tangent basis vector in eye space
-varying vec3 binormalVec;               // binormal basis vector in eye space
+in vec3 normalVec;                      // normal vector in eye space
+in vec3 positionVec;                    // vertex position in eye space
+in vec2 texCoord0;                      // texture coords
+in vec3 tangentVec;                     // tangent basis vector in eye space
+in vec3 binormalVec;                    // binormal basis vector in eye space
+
+// output
+out vec4 fragColor;
 
 void main(void)
 {
@@ -92,7 +97,7 @@ void main(void)
     tsView.z = dot(normal,   view);
 
     // get normal in tangent space from normal map, then set the range from [0, 1] to [-1, 1]
-    vec3 tsNormal = normalize(texture2D(map0, texCoord0).rgb * TWO - ONE);
+    vec3 tsNormal = normalize(texture(map0, texCoord0).rgb * TWO - ONE);
 
     /*
     // compute reflect vector in tangent space
@@ -119,7 +124,7 @@ void main(void)
     color += dotNL * materialDiffuse.xyz * lightColor.xyz;
 
     // apply texture before specular
-    //color *= texture2D(map0, texCoord0).rgb;
+    //color *= texture(map0, texCoord0).rgb;
 
     // add specular portion
     float dotVR = max(dot(tsView, tsReflect), ZERO);
@@ -127,5 +132,5 @@ void main(void)
     color = view;
 
     // set frag color
-    gl_FragColor = vec4(color * attenuation, materialDiffuse.a);  // keep alpha as original material has
+    fragColor = vec4(color * attenuation, materialDiffuse.a);  // keep alpha as original material has
 }
