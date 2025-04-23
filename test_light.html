@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html>
+
+<!-- ==========================================================================
+test for single light
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2015-05-15
+UPDATED: 2025-04-23
+===============================================================================
+-->
+
+<head>
+<title>Light</title>
+<meta name="generator" content="editplus" />
+<meta name="author" content="Song Ho Ahn" />
+<meta name="keywords" content="" />
+<meta name="description" content="" />
+<meta charset="utf-8">
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    font-size:12px;
+}
+h3 {
+    margin-bottom:5px;
+}
+p {
+    margin:0 0 1em 0;
+}
+.contentblock {
+    display:flex;
+    position:absolute;
+    left:0px;
+    right:0px;
+    top:0px;
+    bottom:0px;
+    padding:10px;
+    line-height:0;
+}
+.mainblock {
+    position:relative;
+    flex:1 1 300px;
+    border:1px solid #ddd;
+}
+.rightblock {
+    flex:0 0 350px;
+    height:100%;
+    overflow:auto;
+    margin-left:10px;
+    line-height:110%;
+}
+#webglView {
+    width:100%;
+    height:100%;
+}
+#info {
+    position:absolute;
+    top:0;
+    right:0;
+    margin-top:5px;
+    margin-right:5px;
+    line-height:110%;
+}
+hr {
+    height:1px;
+    background-color:#aaa;
+    border:none;
+}
+.gridbox {
+    display:grid;
+    grid-template-columns:60px 195px;
+    gap:5px;
+    font-size:0.8em;
+}
+.gridcol1 {
+    text-align:right;
+    font-weight:bold;
+}
+.gridcol2 {
+    word-wrap:break-word;
+}
+/* tabs */
+.tabs {
+    display:flex;
+    flex-wrap:wrap;
+    width:100%;
+    background-color:#f8f8f8;
+    box-sizing:border-box;
+    padding:0;
+}
+.tabs input[type=radio] {
+    display:none;
+}
+.tablabel {
+    font-weight:bold;
+    cursor:pointer;
+    padding:10px 20px;
+    color:#666;
+    background-color:#f8f8f8;
+    transition:color 0.2s, background 0.2s;
+    border-top:3px solid transparent;
+    border-left:1px solid transparent;
+    border-right:1px solid transparent;
+    border-bottom:none;
+ }
+.tablabel:hover {
+    color:#000;
+    background-color:#ddd;
+}
+.tabs input:checked + .tablabel {
+    color:#000;
+    background-color:#fff;
+    border-top:2px solid #000;
+    border-left:1px solid #aaa;
+    border-right:1px solid #aaa;
+    border-bottom:1px solid #fff;
+    position:relative;
+    top:1px;
+}
+.tabs .tabcontent {
+    display:none;
+    width:100%;
+    margin:0;
+    padding:10px;
+    border:1px solid #aaa;
+    order:99;
+}
+.tabs input:checked + .tablabel + .tabcontent {
+    display:block;
+    background-color:#fff;
+}
+/* GUI */
+fieldset {
+    border:1px solid #eee;
+}
+legend {
+    font-size:1.2em;
+    font-weight:bold;
+}
+.slidergroup {
+    margin-bottom:10px;
+}
+.flexblock {
+    display:flex;
+    align-items:center;
+}
+.col1 {
+    flex:0 0 60px;
+    font-size:12px;
+}
+.col3 {
+    flex:0 0 24px;
+    font-size:12px;
+}
+.subheader {
+    font-weight:bold;
+    margin-top:5px;
+}
+input[type="range"] {
+    flex:1 1 auto;
+}
+input[type="button"] {
+    width:100%;
+}
+</style>
+
+
+
+<!-- JavaScript -->
+<script type="text/javascript"src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script type="text/javascript" src="files/js/Vectors.js"></script>
+<script type="text/javascript" src="files/js/Matrices.js"></script>
+<script type="text/javascript" src="files/js/Light.js"></script>
+<script type="text/javascript" src="files/js/Material.js"></script>
+<script type="text/javascript" src="files/js/MouseState.js"></script>
+<script type="text/javascript" src="files/js/ObjModel.js"></script>
+<script type="text/javascript" src="files/js/webglUtils.js"></script>
+
+<script type="text/javascript">
+
+// global vars
+let gl = null;
+let vboVertex;  // vertex attributes
+let vboIndex;   // index attribute
+
+// constants
+const ATT_CONST = 1;
+const ATT_LINEAR = 0.1;
+const ATT_QUADRATIC = 0.01;
+const AMBIENT = new Vector3(0, 0, 0);           // material ambient (r,g,b)
+const DIFFUSE = new Vector3(0.8, 0.8, 0.8);     // material diffuse (r,g,b)
+const SPECULAR = new Vector3(1, 1, 1);          // material specular (r,g,b)
+const SHININESS = 64;                           // material shininess
+const LIGHT_POS = new Vector4(-5, -5, -5, 1);   // (x,y,z,w)
+const LIGHT_COLOR = new Vector3(1, 1, 1);       // (r,g,b)
+const POINT_RADIUS = 20;
+const CAMERA_ANGLE = new Vector2(30, -45);      // (x, y) in degree 
+const CAMERA_Z = 30;
+
+
+///////////////////////////////////////////////////////////////////////////////
+// main entry point
+///////////////////////////////////////////////////////////////////////////////
+document.addEventListener("DOMContentLoaded", () =>
+{
+    let success = initWebGL("webglView");
+    if(!success)
+        return;
+
+    initGui();
+});
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init WebGL
+///////////////////////////////////////////////////////////////////////////////
+function initWebGL(canvasId)
+{
+    try{
+
+    let canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        let node = canvas.parentNode;
+        let message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        node.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                         message +
+                         "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // get gl context
+    gl = getContextGL(canvas)
+    if(!gl)
+    {
+        Logger.show();
+        log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // remember canvas
+    gl.canvas = canvas;
+
+    // init gl and glsl
+    initGL(gl);
+    initGLSL(gl);
+    log("WebGL is initialized.");
+
+    // init app ===============================================================
+
+    gl.nearPlane = 1;
+    gl.farPlane = 1000;
+
+    initPoint();
+
+    // load OBJ
+    let obj = new ObjModel(gl);
+    obj.read("files/models/cube_room.obj").then(obj => initVBOs(obj));
+
+    // load a texture and redraw the scene after it is loaded
+    gl.tex0 = loadTexture(gl, "files/images/grid512.png", false, frame);
+
+    // add mouse state holder
+    gl.mouse = new MouseState();
+
+    // init touch states
+    gl.touches = [];
+
+    // register event handlers
+    window.addEventListener("resize",  handleResize);
+    log("Added window resize envent listener, handleResize().");
+    canvas.addEventListener("click", handleClick);
+    log("Added canvas click event listener, handleClick().");
+    // mouse events
+    canvas.addEventListener("mousemove", handleMouseMove);
+    log("Added canvas mousemove event listener, handleMouseMove().");
+    canvas.addEventListener("mousedown", handleMouseDown);
+    log("Added canvas mousedown event listener, handleMouseDown().");
+    canvas.addEventListener("mouseup", handleMouseUp);
+    log("Added canvas mouseup event listener, handleMouseUp().");
+    canvas.addEventListener("mouseout", handleMouseOut);
+    log("Added canvas mouseout event listener, handleMouseOut().");
+    canvas.addEventListener("contextmenu", handleContextMenu);
+    log("Added canvas contextmenu event listener, handleContextMenu().");
+    canvas.addEventListener("wheel", handleWheel);
+    log("Added canvas wheel event listeners, handleWheel()");
+    // canvas touch events
+    canvas.addEventListener("touchstart", handleTouchStart);
+    canvas.addEventListener("touchmove", handleTouchMove);
+    canvas.addEventListener("touchend", handleTouchEnd);
+    canvas.addEventListener("touchcancel", handleTouchCancel);
+    log("Added canvas touch events.");
+
+    handleResize();
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+    }
+
+    return true;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    drawRoom();
+    drawLight();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw room
+///////////////////////////////////////////////////////////////////////////////
+function drawRoom()
+{
+    // set active program
+    gl.program = gl.shaderPrograms[gl.shadingModel];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    // compute model-view transform
+    gl.matrixModel.identity();
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+
+    // compute normal matrix
+    gl.matrixNormal = gl.matrixModelView.getRotationMatrix();
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+
+    // compute model-view-projection matrix
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    // transform light from world-space to eye-space
+    let esLight = gl.matrixModelView.transform(gl.light.position);
+    gl.uniform4fv(gl.program.uniform.lightPosition, esLight.toFloat32Array());
+
+    // pass color
+    gl.uniform4fv(gl.program.uniform.lightColor, gl.light.getColor());
+
+    // pass attenuation uniform array
+    gl.uniform3fv(gl.program.uniform.lightAttenuations, gl.light.getAttenuations());
+
+    // pass material
+    gl.uniform4fv(gl.program.uniform.materialAmbient, gl.material.getAmbient());
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material.getDiffuse());
+    gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material.getSpecular());
+    gl.uniform1f(gl.program.uniform.materialShininess, gl.material.shininess);
+
+    //gl.activeTexture(gl.TEXTURE0);
+    //gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
+
+    // draw model
+    if(vboVertex && vboIndex)
+    {
+        gl.bindBuffer(gl.ARRAY_BUFFER, vboVertex);
+        gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, vboVertex.normalOffset);
+        //gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 0, vboVertex.texCoordOffset);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vboIndex);
+        gl.drawElements(gl.TRIANGLES, vboIndex.indexCount, gl.UNSIGNED_SHORT, 0);
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw point lights
+///////////////////////////////////////////////////////////////////////////////
+function drawLight()
+{
+    // set active program
+    gl.program = gl.shaderPrograms["point"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+
+    // draw light
+    gl.matrixModel.identity();
+    gl.matrixModel.translate(gl.light.position.x, gl.light.position.y, gl.light.position.z);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, gl.matrixModel.m);
+
+    gl.uniform4fv(gl.program.uniform.color, gl.light.getColor());
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboPoint);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.POINTS, 0, 1);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// post frame
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the canvas is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize()
+{
+    // resize window to fit to parent
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+    //log(gl.canvas.parentNode.clientWidth + "x" + gl.canvas.parentNode.clientHeight);
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, gl.nearPlane, gl.farPlane);
+
+    frame();
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handlers for mouse event
+///////////////////////////////////////////////////////////////////////////////
+function handleMouseMove(e)
+{
+    // get current mouse position
+    let offset = getElementOffset(this);
+    let mouseX = e.clientX - offset.x;
+    let mouseY = e.clientY - offset.y;
+    let deltaX = mouseX - gl.mouse.x;
+    let deltaY = mouseY - gl.mouse.y;
+    //log("mouse:" + mouseX + ", " + mouseY + "   " + "delta:" + deltaX + ", " + deltaY);
+
+    // rotate camera
+    if(gl.mouse.leftDown)
+    {
+        gl.camera.angle.y += (mouseX - gl.mouse.x) * 0.01;
+        gl.camera.angle.x += (mouseY - gl.mouse.y) * 0.01;
+    }
+    if(gl.mouse.rightDown)
+    {
+        gl.camera.distance -= (mouseY - gl.mouse.y) * 0.1;
+    }
+    gl.mouse.x = mouseX;
+    gl.mouse.y = mouseY;
+    //log(gl.mouse);
+
+    // update view matrix
+    if(gl.mouse.leftDown || gl.mouse.rightDown)
+    {
+        gl.matrixView.identity();
+        gl.matrixView.rotateY(gl.camera.angle.y);
+        gl.matrixView.rotateX(gl.camera.angle.x);
+        gl.matrixView.translate(0, 0, -gl.camera.distance);
+        frame();
+    }
+}
+
+function handleMouseDown(e)
+{
+    gl.mouse.downX = gl.mouse.x;
+    gl.mouse.downY = gl.mouse.y;
+
+    if(e.button == 0) gl.mouse.leftDown = true;    // primary
+    if(e.button == 1) gl.mouse.middleDown = true;  // auxiliary
+    if(e.button == 2) gl.mouse.rightDown = true;   // secondary
+
+    e.preventDefault(); // disable context menu
+}
+
+function handleMouseUp(e)
+{
+    if(e.button == 0) gl.mouse.leftDown = false;
+    if(e.button == 1) gl.mouse.middleDown = false;
+    if(e.button == 2) gl.mouse.rightDown = false;
+    //e.preventDefault(); // disable context menu
+}
+
+function handleWheel(e)
+{
+    // positive deltaY = wheel down
+    // negative deltaY = wheel up
+    if(e.deltaY != 0)
+    {
+        let deltaDistance = e.deltaY * 0.1;
+        gl.camera.distance += deltaDistance;
+        if(gl.cameraDistance < gl.nearPlane)
+            gl.cameraDistance = gl.nearPlane;
+        else if(gl.camera.distance > gl.farPlane)
+            gl.camera.distance = gl.farPlane;
+
+        gl.matrixView.identity();
+        gl.matrixView.rotateY(gl.camera.angle.y);
+        gl.matrixView.rotateX(gl.camera.angle.x);
+        gl.matrixView.translate(0, 0, -gl.camera.distance);
+        frame();
+    }
+
+    e.preventDefault();
+}
+
+function handleMouseOut(e)
+{
+    gl.mouse.leftDown = false;
+    gl.mouse.rightDown = false;
+}
+
+function handleClick(e)
+{
+}
+
+function handleContextMenu(e)
+{
+    e.preventDefault(); // disable context menu
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handle touch events
+///////////////////////////////////////////////////////////////////////////////
+function handleTouchStart(e)
+{
+    e.preventDefault();
+
+    let touches = e.changedTouches;
+    for(let i = 0; i < touches.length; ++i)
+    {
+        gl.touches.push(copyTouch(touches[i]));
+        gl.touches.distance = 0;
+    }
+
+    if(gl.touches.length == 1)
+        gl.touches.downTouch = copyTouch(gl.touches[0]);
+}
+
+function handleTouchMove(e)
+{
+    e.preventDefault();
+
+    let touches = e.changedTouches;
+    let touch1, touch2; // current touches
+
+    for(let i = 0; i < touches.length; ++i)
+    {
+        //log("Touch Moved:" + findTouchIndex(touches[i]));
+        let index = findTouchIndex(touches[i]);
+        if(index == 0)
+            touch1 = touches[i];
+        else if(index == 1)
+            touch2 = touches[i];
+    }
+
+    if(gl.touches.length == 2)
+    {
+        // pan or zoom camera
+    }
+    else if(gl.touches.length == 1)
+    {
+        // rotate camera
+        // update position
+        gl.touches[0].pageX = touch1.pageX;
+        gl.touches[0].pageY = touch1.pageY;
+    }
+}
+
+function handleTouchEnd(e)
+{
+    e.preventDefault();
+
+    let touches = e.changedTouches;
+    for(let i = 0; i < touches.length; ++i)
+    {
+        let index = findTouchIndex(touches[i]);
+        if(index >= 0) // found
+        {
+            gl.touches.splice(index, 1);    // remove
+        }
+    }
+
+    if(gl.touches.length > 0)
+        gl.touches.downTouch = copyTouch(gl.touches[0]);
+}
+
+function handleTouchCancel(e)
+{
+    gl.touches.length = 0;
+   //log("Touch canceled.");
+}
+
+function handleTouchLeave(e)
+{
+    gl.touches.length = 0;
+    //log("Touch left.");
+}
+
+function copyTouch(touch)
+{
+    return {identifier:touch.identifier, pageX:touch.pageX, pageY:touch.pageY};
+}
+
+function findTouchIndex(touch)
+{
+    for(let i = 0; i < gl.touches.length; ++i)
+    {
+        if(touch.identifier == gl.touches[i].identifier)
+            return i;
+    }
+    return -1;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL(gl)
+{
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);                       // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);                        // enable culling backface
+    gl.cullFace(gl.BACK);
+
+    // default light
+    gl.light = new Light(LIGHT_POS.x, LIGHT_POS.y, LIGHT_POS.z, LIGHT_POS.w);
+    gl.light.color.set(LIGHT_COLOR.x, LIGHT_COLOR.y, LIGHT_COLOR.z, 1); // (r,g,b,a)
+    gl.light.attenuations.set(ATT_CONST, ATT_LINEAR, ATT_QUADRATIC);
+    log(gl.light);
+
+    // default material
+    gl.material = new Material(DIFFUSE.x, DIFFUSE.y, DIFFUSE.z, 1.0); // with diffuse
+    gl.material.ambient.set(AMBIENT.x, AMBIENT.y, AMBIENT.z, 1.0);
+    gl.material.specular.set(SPECULAR.x, SPECULAR.y, SPECULAR.z, 1);
+    gl.material.shininess = SHININESS;
+    log(gl.material);
+
+    // camera
+    gl.camera = {};
+    gl.camera.angle = new Vector2(deg2rad(CAMERA_ANGLE.x), deg2rad(CAMERA_ANGLE.y));
+    gl.camera.distance = CAMERA_Z;
+
+    // init matrices
+    gl.matrixView = new Matrix4();
+    gl.matrixView.rotateY(gl.camera.angle.y);
+    gl.matrixView.rotateX(gl.camera.angle.x);
+    gl.matrixView.translate(0, 0, -gl.camera.distance);
+
+    gl.matrixModel = new Matrix4();
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+
+    // init projection matrix and viewport
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, gl.nearPlane, gl.farPlane);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create vbo for a cube
+///////////////////////////////////////////////////////////////////////////////
+function initVBOs(obj)
+{
+    log(obj);
+
+    // re-normalize normals
+    obj.normalize();
+    log("Re-normalized the surface normals of OBJ.");
+
+    vboVertex = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboVertex);
+    gl.bufferData(gl.ARRAY_BUFFER, obj.vertices.byteLength + obj.normals.byteLength + obj.texCoords.byteLength, gl.STATIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, obj.vertices);
+    gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength, obj.normals);
+    gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength + obj.normals.byteLength, obj.texCoords);
+    vboVertex.normalOffset = obj.vertices.byteLength;
+    vboVertex.texCoordOffset = obj.vertices.byteLength + obj.normals.byteLength;
+
+    vboIndex = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vboIndex);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, obj.indices, gl.STATIC_DRAW);
+    vboIndex.indexCount = obj.indices.length;
+
+    //obj.clearArrays();
+
+    frame();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL()
+{
+    initVertexAttribArrays(gl);
+
+    // load shaders
+    gl.shaderPrograms = {}; // associative array
+
+    // load phong shader
+    createShaderProgram(gl, "files/glsl/gles_phong.vert", "files/glsl/gles_phong.frag").then(program =>
+    {
+        if(program)
+        {
+            gl.shaderPrograms["phong"] = program;
+        }
+    });
+
+    // load phong shader with 1 texture
+    createShaderProgram(gl, "files/glsl/gles_phongTex.vert", "files/glsl/gles_phongTex.frag").then(program =>
+    {
+        if(program)
+        {
+            gl.shaderPrograms["phongTex"] = program;
+            // setup uniforms
+            gl.useProgram(program);
+            gl.uniform1i(program.uniform.map0, 0);
+        }
+    });
+
+    // load blinn shader
+    createShaderProgram(gl, "files/glsl/gles_blinn.vert", "files/glsl/gles_blinn.frag").then(program =>
+    {
+        if(program)
+        {
+            gl.shaderPrograms["blinn"] = program;
+        }
+    });
+
+    // load blinn shader with texture
+    createShaderProgram(gl, "files/glsl/gles_blinnTex.vert", "files/glsl/gles_blinnTex.frag").then(program =>
+    {
+        if(program)
+        {
+            gl.shaderPrograms["blinnTex"] = program;
+        }
+    });
+
+    // load shader for points
+    createShaderProgram(gl, "files/glsl/gles_point.vert", "files/glsl/gles_point.frag").then(program =>
+    {
+        if(program)
+        {
+            gl.shaderPrograms["point"] = program;
+            // setup uniforms
+            gl.useProgram(program);
+            gl.uniform1f(program.uniform.pointSize, POINT_RADIUS);
+        }
+    });
+
+    gl.shadingModel = "phong";  // default shading: phong or blinn
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create a VBO for a 3D point
+///////////////////////////////////////////////////////////////////////////////
+function initPoint()
+{
+    let points = new Float32Array([0,0,0]); // (x,y,z)
+
+    gl.vboPoint = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboPoint);
+    gl.bufferData(gl.ARRAY_BUFFER, points, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init UI
+function initGui()
+{
+    // light position
+    document.getElementById("labelLightPosX").innerHTML = LIGHT_POS.x;
+    document.form1.lightPosX.value = LIGHT_POS.x;
+    document.form1.lightPosX.oninput = function()
+    {
+        document.getElementById("labelLightPosX").innerHTML = this.value;
+        translateLight();
+    };
+
+    document.getElementById("labelLightPosY").innerHTML = LIGHT_POS.y;
+    document.form1.lightPosY.value = LIGHT_POS.y;
+    document.form1.lightPosY.oninput = function()
+    {
+        document.getElementById("labelLightPosY").innerHTML = this.value;
+        translateLight();
+    };
+
+    document.getElementById("labelLightPosZ").innerHTML = LIGHT_POS.z;
+    document.form1.lightPosZ.value = LIGHT_POS.z;
+    document.form1.lightPosZ.oninput = function()
+    {
+        document.getElementById("labelLightPosZ").innerHTML = this.value;
+        translateLight();
+    };
+
+    // light color
+    document.getElementById("labelLightColorR").innerHTML = LIGHT_COLOR.x; // red
+    document.form1.lightColorR.value = LIGHT_COLOR.x;
+    document.form1.lightColorR.oninput = function()
+    {
+        document.getElementById("labelLightColorR").innerHTML = this.value;
+        updateLightColor();
+    };
+    document.getElementById("labelLightColorG").innerHTML = LIGHT_COLOR.y; // green
+    document.form1.lightColorG.value = LIGHT_COLOR.y;
+    document.form1.lightColorG.oninput = function()
+    {
+        document.getElementById("labelLightColorG").innerHTML = this.value;
+        updateLightColor();
+    };
+    document.getElementById("labelLightColorB").innerHTML = LIGHT_COLOR.z; // blue
+    document.form1.lightColorB.value = LIGHT_COLOR.z;
+    document.form1.lightColorB.oninput = function()
+    {
+        document.getElementById("labelLightColorB").innerHTML = this.value;
+        updateLightColor();
+    };
+
+    // light attenuation coefficient
+    document.getElementById("labelAttConst").innerHTML = ATT_CONST;
+    document.form1.attConst.value = ATT_CONST;
+    document.form1.attConst.oninput = function()
+    {
+        document.getElementById("labelAttConst").innerHTML = this.value;
+        updateAttenuations();
+    };
+    document.getElementById("labelAttLinear").innerHTML = ATT_LINEAR;
+    document.form1.attLinear.value = ATT_LINEAR;
+    document.form1.attLinear.oninput = function()
+    {
+        document.getElementById("labelAttLinear").innerHTML = this.value;
+        updateAttenuations();
+    };
+    document.getElementById("labelAttQuadratic").innerHTML = ATT_QUADRATIC;
+    document.form1.attQuadratic.value = ATT_QUADRATIC;
+    document.form1.attQuadratic.oninput = function()
+    {
+        document.getElementById("labelAttQuadratic").innerHTML = this.value;
+        updateAttenuations();
+    };
+
+    // material ambient
+    document.getElementById("labelAmbientR").innerHTML = AMBIENT.x; // r
+    document.form1.ambientR.value = AMBIENT.x;
+    document.form1.ambientR.oninput = function()
+    {
+        document.getElementById("labelAmbientR").innerHTML = this.value;
+        updateMaterial();
+    };
+    document.getElementById("labelAmbientG").innerHTML = AMBIENT.y; // g
+    document.form1.ambientG.value = AMBIENT.y;
+    document.form1.ambientG.oninput = function()
+    {
+        document.getElementById("labelAmbientG").innerHTML = this.value;
+        updateMaterial();
+    };
+    document.getElementById("labelAmbientB").innerHTML = AMBIENT.z; // b
+    document.form1.ambientB.value = AMBIENT.z;
+    document.form1.ambientB.oninput = function()
+    {
+        document.getElementById("labelAmbientB").innerHTML = this.value;
+        updateMaterial();
+    };
+
+    // material diffuse
+    document.getElementById("labelDiffuseR").innerHTML = DIFFUSE.x; // r
+    document.form1.diffuseR.value = DIFFUSE.x;
+    document.form1.diffuseR.oninput = function()
+    {
+        document.getElementById("labelDiffuseR").innerHTML = this.value;
+        updateMaterial();
+    };
+    document.getElementById("labelDiffuseG").innerHTML = DIFFUSE.y; // g
+    document.form1.diffuseG.value = DIFFUSE.y;
+    document.form1.diffuseG.oninput = function()
+    {
+        document.getElementById("labelDiffuseG").innerHTML = this.value;
+        updateMaterial();
+    };
+    document.getElementById("labelDiffuseB").innerHTML = DIFFUSE.z; // b
+    document.form1.diffuseB.value = DIFFUSE.z;
+    document.form1.diffuseB.oninput = function()
+    {
+        document.getElementById("labelDiffuseB").innerHTML = this.value;
+        updateMaterial();
+    };
+
+    // material specular
+    document.getElementById("labelSpecularR").innerHTML = SPECULAR.x; // r
+    document.form1.specularR.value = SPECULAR.x;
+    document.form1.specularR.oninput = function()
+    {
+        document.getElementById("labelSpecularR").innerHTML = this.value;
+        updateMaterial();
+    };
+    document.getElementById("labelSpecularG").innerHTML = SPECULAR.y; // g
+    document.form1.specularG.value = SPECULAR.y;
+    document.form1.specularG.oninput = function()
+    {
+        document.getElementById("labelSpecularG").innerHTML = this.value;
+        updateMaterial();
+    };
+    document.getElementById("labelSpecularB").innerHTML = SPECULAR.z; // b
+    document.form1.specularB.value = SPECULAR.z;
+    document.form1.specularB.oninput = function()
+    {
+        document.getElementById("labelSpecularB").innerHTML = this.value;
+        updateMaterial();
+    };
+
+    // shininess
+    document.getElementById("labelShininess").innerHTML = SHININESS;
+    document.form1.shininess.value = SHININESS;
+    document.form1.shininess.oninput = function()
+    {
+        document.getElementById("labelShininess").innerHTML = this.value;
+        updateMaterial();
+    };
+
+    // shading model
+    let radios = document.form1.shadingmodel;
+    radios.value = "phong";
+    radios.forEach(radio => { radio.onclick = () => setShadingModel(radio.value); });
+
+    // reset button
+    document.form1.reset.onclick = reset;
+}
+
+function translateLight()
+{
+    let x = document.form1.lightPosX.value;
+    let y = document.form1.lightPosY.value;
+    let z = document.form1.lightPosZ.value;
+    gl.light.setPosition(x, y, z, 1);
+    frame();
+}
+function updateLightColor()
+{
+    let r = document.form1.lightColorR.value;
+    let g = document.form1.lightColorG.value;
+    let b = document.form1.lightColorB.value;
+    gl.light.setColor(r, g, b, 1);
+    frame();
+}
+function updateAttenuations()
+{
+    let attConst = document.form1.attConst.value;
+    let attLinear = document.form1.attLinear.value;
+    let attQuadratic = document.form1.attQuadratic.value;
+    gl.light.attenuations.set(attConst, attLinear, attQuadratic);
+    frame();
+}
+function updateMaterial()
+{
+    let r = document.form1.ambientR.value;
+    let g = document.form1.ambientG.value;
+    let b = document.form1.ambientB.value;
+    gl.material.ambient.set(r, g, b, 1);
+
+    r = document.form1.diffuseR.value;
+    g = document.form1.diffuseG.value;
+    b = document.form1.diffuseB.value;
+    gl.material.diffuse.set(r, g, b, 1);
+
+    r = document.form1.specularR.value;
+    g = document.form1.specularG.value;
+    b = document.form1.specularB.value;
+    gl.material.specular.set(r, g, b, 1);
+
+    gl.material.shininess = document.form1.shininess.value;
+
+    frame();
+}
+function setShadingModel(shading)
+{
+    log(shading);
+    if(gl.shadingModel != shading)
+    {
+        gl.shadingModel = shading;
+        frame();
+    }
+}
+function reset()
+{
+    document.form1.lightPosX.value = LIGHT_POS.x;
+    document.getElementById("labelLightPosX").innerHTML = LIGHT_POS.x;
+    document.form1.lightPosY.value = LIGHT_POS.y;
+    document.getElementById("labelLightPosY").innerHTML = LIGHT_POS.y;
+    document.form1.lightPosZ.value = LIGHT_POS.z;
+    document.getElementById("labelLightPosZ").innerHTML = LIGHT_POS.z;
+    gl.light.setPosition(LIGHT_POS.x, LIGHT_POS.y, LIGHT_POS.z, 1);
+
+    document.form1.lightColorR.value = LIGHT_COLOR.x;
+    document.getElementById("labelLightColorR").innerHTML = LIGHT_COLOR.x;
+    document.form1.lightColorG.value = LIGHT_COLOR.y;
+    document.getElementById("labelLightColorG").innerHTML = LIGHT_COLOR.y;
+    document.form1.lightColorB.value = LIGHT_COLOR.z;
+    document.getElementById("labelLightColorB").innerHTML = LIGHT_COLOR.z;
+    gl.light.setColor(LIGHT_COLOR.x, LIGHT_COLOR.y, LIGHT_COLOR.z, 1);
+
+    document.form1.attConst.value = ATT_CONST;
+    document.getElementById("labelAttConst").innerHTML = ATT_CONST;
+    document.form1.attLinear.value = ATT_LINEAR;
+    document.getElementById("labelAttLinear").innerHTML = ATT_LINEAR;
+    document.form1.attQuadratic.value = ATT_QUADRATIC;
+    document.getElementById("labelAttQuadratic").innerHTML = ATT_QUADRATIC;
+    gl.light.setAttenuations(ATT_CONST, ATT_LINEAR, ATT_QUADRATIC);
+
+    document.form1.ambientR.value = AMBIENT.x;
+    document.getElementById("labelAmbientR").innerHTML = AMBIENT.x;
+    document.form1.ambientG.value = AMBIENT.y;
+    document.getElementById("labelAmbientG").innerHTML = AMBIENT.y;
+    document.form1.ambientB.value = AMBIENT.z;
+    document.getElementById("labelAmbientB").innerHTML = AMBIENT.z;
+    gl.material.ambient.set(AMBIENT.x, AMBIENT.y, AMBIENT.z, 1);
+
+    document.form1.diffuseR.value = DIFFUSE.x;
+    document.getElementById("labelDiffuseR").innerHTML = DIFFUSE.x;
+    document.form1.diffuseG.value = DIFFUSE.y;
+    document.getElementById("labelDiffuseG").innerHTML = DIFFUSE.y;
+    document.form1.diffuseB.value = DIFFUSE.z;
+    document.getElementById("labelDiffuseB").innerHTML = DIFFUSE.z;
+    gl.material.diffuse.set(DIFFUSE.x, DIFFUSE.y, DIFFUSE.z, 1);
+
+    document.form1.specularR.value = SPECULAR.x;
+    document.getElementById("labelSpecularR").innerHTML = SPECULAR.x;
+    document.form1.specularG.value = SPECULAR.y;
+    document.getElementById("labelSpecularG").innerHTML = SPECULAR.y;
+    document.form1.specularB.value = SPECULAR.z;
+    document.getElementById("labelSpecularB").innerHTML = SPECULAR.z;
+    gl.material.specular.set(SPECULAR.x, SPECULAR.y, SPECULAR.z, 1);
+
+    document.form1.shininess.value = SHININESS;
+    document.getElementById("labelShininess").innerHTML = SHININESS;
+    gl.material.shininess = SHININESS;
+
+    document.form1.shadingmodel.value = "phong";
+    //document.getElementById("shadingmodel1").checked = true;
+
+    // reset camera
+    gl.camera.angle = new Vector2(deg2rad(CAMERA_ANGLE.x), deg2rad(CAMERA_ANGLE.y));
+    gl.camera.distance = CAMERA_Z;
+    gl.matrixView.identity();
+    gl.matrixView.rotateY(gl.camera.angle.y);
+    gl.matrixView.rotateX(gl.camera.angle.x);
+    gl.matrixView.translate(0, 0, -gl.camera.distance);
+
+    frame();
+}
+
+</script>
+
+</head>
+
+
+
+<body>
+
+<div class="contentblock">
+
+<div class="mainblock">
+<canvas id="webglView" width="512" height="512">
+</canvas>
+</div><!-- end of mainblock -->
+
+
+<div class="rightblock">
+
+<form name="form1">
+
+<fieldset class="slidergroup">
+<legend>Positional Light</legend>
+<div class="subheader">Position</div>
+<div class="flexblock">
+<span class="col1">X:</span><input type="range" name="lightPosX" min="-10" max="10" step="0.1" value="0"><label id="labelLightPosX" class="col3">0</label>
+</div>
+<div class="flexblock">
+<span class="col1">Y:</span><input type="range" name="lightPosY" min="-10" max="10" step="0.1" value="0"><label id="labelLightPosY" class="col3">0</label>
+</div>
+<div class="flexblock">
+<span class="col1">Z:</span><input type="range" name="lightPosZ" min="-10" max="10" step="0.1" value="0"><label id="labelLightPosZ" class="col3">0</label>
+</div>
+
+<div class="subheader">Color</div>
+<div class="flexblock">
+<span class="col1">R:</span><input type="range" name="lightColorR" min="0" max="1" step="0.01" value="1"><label id="labelLightColorR" class="col3">1</label>
+</div>
+<div class="flexblock">
+<span class="col1">G:</span><input type="range" name="lightColorG" min="0" max="1" step="0.01" value="1"><label id="labelLightColorG" class="col3">1</label>
+</div>
+<div class="flexblock">
+<span class="col1">B:</span><input type="range" name="lightColorB" min="0" max="1" step="0.01" value="1"><label id="labelLightColorB" class="col3">1</label>
+</div>
+
+<div class="subheader">Attenuations (K0, K1, K2)</div>
+<div class="flexblock">
+<span class="col1">Constant:</span><input type="range" name="attConst" min="1" max="5" step="0.01" value="1"><label id="labelAttConst" class="col3">1</label>
+</div>
+<div class="flexblock">
+<span class="col1">Linear:</span><input type="range" name="attLinear" min="0" max="1" step="0.01" value="0.1"><label id="labelAttLinear" class="col3">0.1</label>
+</div>
+<div class="flexblock">
+<span class="col1">Quadratic:</span><input type="range" name="attQuadratic" min="0" max="0.5" step="0.01" value="0"><label id="labelAttQuadratic" class="col3">0.01</label>
+</div>
+</fieldset>
+
+
+<fieldset class="slidergroup">
+<legend>Material</legend>
+<div class="subheader">Ambient Color</div>
+<div class="flexblock">
+<span class="col1">R:</span><input type="range" name="ambientR" min="0" max="1" step="0.01" value="0"><label id="labelAmbientR" class="col3">0</label>
+</div>
+<div class="flexblock">
+<span class="col1">G:</span><input type="range" name="ambientG" min="0" max="1" step="0.01" value="0"><label id="labelAmbientG" class="col3">0</label>
+</div>
+<div class="flexblock">
+<span class="col1">B:</span><input type="range" name="ambientB" min="0" max="1" step="0.01" value="0"><label id="labelAmbientB" class="col3">0</label>
+</div>
+
+<div class="subheader">Diffuse Color</div>
+<div class="flexblock">
+<span class="col1">R:</span><input type="range" name="diffuseR" min="0" max="1" step="0.01" value="0.8"><label id="labelDiffuseR" class="col3">0.8</label>
+</div>
+<div class="flexblock">
+<span class="col1">G:</span><input type="range" name="diffuseG" min="0" max="1" step="0.01" value="0.8"><label id="labelDiffuseG" class="col3">0.8</label>
+</div>
+<div class="flexblock">
+<span class="col1">B:</span><input type="range" name="diffuseB" min="0" max="1" step="0.01" value="0.8"><label id="labelDiffuseB" class="col3">0.8</label>
+</div>
+
+<div class="subheader">Specular Color</div>
+<div class="flexblock">
+<span class="col1">R:</span><input type="range" name="specularR" min="0" max="1" step="0.01" value="1"><label id="labelSpecularR" class="col3">1</label>
+</div>
+<div class="flexblock">
+<span class="col1">G:</span><input type="range" name="specularG" min="0" max="1" step="0.01" value="1"><label id="labelSpecularG" class="col3">1</label>
+</div>
+<div class="flexblock">
+<span class="col1">B:</span><input type="range" name="specularB" min="0" max="1" step="0.01" value="1"><label id="labelSpecularB" class="col3">1</label>
+</div>
+<div class="flexblock">
+<span class="col1">Shininess:</span><input type="range" id="shininess" name="shininess" min="1" max="128" step="1" value="64"><label id="labelShininess" for="shininess" class="col3">64</label>
+</div>
+</fieldset>
+
+<fieldset class="shadinggroup">
+<legend>Shading Model</legend>
+<input type="radio" id="shadingmodel1" name="shadingmodel" value="phong" checked><label for="shadingmodel1">Phong</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<input type="radio" id="shadingmodel2" name="shadingmodel" value="blinn"><label for="shadingmodel2">Blinn</label>
+</fieldset>
+<br>
+
+<input type="button" name="reset" value="Reset">
+</form>
+
+</div> <!-- end of rightblock -->
+
+
+</div> <!-- end of contentblock -->
+</body>
+</html>
