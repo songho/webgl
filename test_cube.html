@@ -143,7 +143,7 @@ void main(void)
     float dotNL = max(dot(normal, light), 0.0);
     vec3 color = dotNL * colorVec.rgb;
     //color = normal;
-    
+
     gl_FragColor = vec4(color, colorVec.a); // keep original alpha
 }
 </script>
@@ -618,7 +618,7 @@ function initGL(gl)
 ///////////////////////////////////////////////////////////////////////////////
 function initGLSL(gl)
 {
-    
+
     // create shader objects
     createShaderProgram(gl, "files/glsl/gles_phongColorTex.vert", "files/glsl/gles_phongColorTex.frag").then(program =>
     {
@@ -681,7 +681,7 @@ function initCube(gl)
                                    0,1,0,1,  0,1,1,1,  0,0,1,1,  0,0,0,1]);     // v5-v4-v7-v6
     // tex-coord array (s,t)
     let texCoords = new Float32Array([1,0,  0,0,  0,1,  1,1,                    // v0-v1-v2-v3
-                                      0,0,  1,0,  1,1,  1,0,                    // v0-v3-v7-v4
+                                      0,0,  0,1,  1,1,  1,0,                    // v0-v3-v7-v4
                                       1,1,  1,0,  0,0,  0,1,                    // v0-v4-v5-v1
                                       1,0,  0,0,  0,1,  1,1,                    // v1-v5-v6-v2
                                       0,1,  1,1,  1,0,  0,0,                    // v6-v7-v3-v2
@@ -718,7 +718,7 @@ function initCube(gl)
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
     gl.ibo.indexCount = indices.length;
-    
+
     log("Initialized VBO for cube.");
 }
 
