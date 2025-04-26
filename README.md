@@ -4,6 +4,8 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 1. [Overview](https://www.songho.ca/webgl/webgl_overview.html): Initialization of WebGL RC (Rendering Context)
 2. [Vectors & Matrices](https://www.songho.ca/webgl/webgl_vectormatrix.html): Vector and Matrix classes
 3. [GLSL Shaders](https://www.songho.ca/webgl/webgl_shader.html): GLSL Shader Program
+4. [VBO](https://www.songho.ca/webgl/webgl_vbo.html): Vertex Buffer Object (VBO)
+
 
 
 
