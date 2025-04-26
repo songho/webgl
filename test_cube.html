@@ -345,9 +345,6 @@ function frame()
     gl.vertexAttribPointer(gl.program.attribute.vertexColor, 4, gl.FLOAT, false, 0, gl.vbo.colorOffset);
     gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 0, gl.vbo.texCoordOffset);
 
-    // draw with vertices
-    //gl.drawArrays(gl.TRIANGLES, 0, 3);
-
     // draw using indices
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.ibo);
     gl.drawElements(gl.TRIANGLES, gl.ibo.indexCount, gl.UNSIGNED_SHORT, 0);
