@@ -200,7 +200,7 @@ const SHININESS = 64;                           // material shininess
 const LIGHT_POS = new Vector4(-5, -5, -5, 1);   // (x,y,z,w)
 const LIGHT_COLOR = new Vector3(1, 1, 1);       // (r,g,b)
 const POINT_RADIUS = 20;
-const CAMERA_ANGLE = new Vector2(30, -45);      // (x, y) in degree 
+const CAMERA_ANGLE = new Vector2(30, -45);      // (x, y) in degree
 const CAMERA_Z = 30;
 
 
@@ -746,6 +746,7 @@ function initGLSL()
         if(program)
         {
             gl.shaderPrograms["phong"] = program;
+            frame();
         }
     });
 
