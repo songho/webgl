@@ -77,7 +77,8 @@ void main(void)
         light = normalize(light);
     }
 
-    // compute reflected ray vector: 2 * N * (N dot L) - L
+    // compute reflected ray vector: 2 * (N dot L) * N - L
+    //vec3 reflectVec = 2.0 * dot(normal, light) * normal - light;
     vec3 reflectVec = reflect(-light, normal);
 
     // compute view vector (from vertex to camera) in eye space
