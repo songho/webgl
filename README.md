@@ -5,7 +5,7 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 2. [Vectors & Matrices](https://www.songho.ca/webgl/webgl_vectormatrix.html): Vector and Matrix classes
 3. [GLSL Shaders](https://www.songho.ca/webgl/webgl_shader.html): GLSL Shader Program
 4. [VBO](https://www.songho.ca/webgl/webgl_vbo.html): Vertex Buffer Object (VBO)
-5. [Ligiting](https://www.songho.ca/webgl/webgl_light.html): Liginting: Ambient, Diffuse, Specular & Attenuation
+5. [Ligiting](https://www.songho.ca/webgl/webgl_light.html): Ambient, Diffuse, Specular & Attenuation
 6. [Drawing Cube](https://www.songho.ca/webgl/webgl_cube.html): Draw a rotating cube with a texture map and vertex colors
 
 
