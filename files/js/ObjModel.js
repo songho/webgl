@@ -6,7 +6,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2011-12-19
-// UPDATED: 2020-10-26
+// UPDATED: 2025-05-02
 //
 // Copyright (c) 2011. Song Ho Ahn
 ///////////////////////////////////////////////////////////////////////////////
@@ -36,6 +36,7 @@ let ObjModel = function()
     this.indices = null;
     this.center = new Vector3();
     this.radius = 0;
+    this.indexType = 0x1403; // UNSIGNED_SHORT or UNSIGNED_INT (0x1405)
     // dimension
     this.minX = 0;
     this.minY = 0;
@@ -189,12 +190,15 @@ ObjModel.prototype =
                         faceIndices = [tokens[1], tokens[2], tokens[3]]; // get 3 indices per face
 
                     let vi, ni, ti; // vertex, normal and texCoord index for lookup tables
+                    let vi1, vi2, vi3;
+                    let v1, v2, v3;
                     for(k = 0; k < faceIndices.length; k++)
                     {
                         // new face index
                         if(faces[faceIndices[k]] == undefined)
                         {
                             let indexStrings = faceIndices[k].split("/");
+
                             vi = 3 * (parseInt(indexStrings[0]) - 1); // compute vertex index
 
                             // add new vertex
@@ -202,29 +206,23 @@ ObjModel.prototype =
 
                             if(indexStrings.length == 1) // vertex only
                             {
-                                //@@ need to compute normals here
+                                //@@ need to generate normals
                             }
-                            else if(indexStrings.length == 2)
+                            else if(indexStrings.length == 2) // vertex and texCoord
                             {
-                                if(faceIndices[k].search("//") > 0) // vertex and normal
-                                {
-                                    // add new normal
-                                    ni = 3 * (parseInt(indexStrings[1]) - 1); // compute normal lookup index
-                                    normals.push(normalLookup[ni], normalLookup[ni+1], normalLookup[ni+2]); // add normal
-                                }
-                                else
-                                {
-                                    //@@ need to generate normals here
-                                    ti = 2 * (parseInt(indexStrings[1]) - 1);
-                                    texCoords.push(texCoordLookup[ti], texCoordLookup[ti+1]); // add st coord
-                                }
+                                //@@ need to generate normals here
+                                ti = 2 * (parseInt(indexStrings[1]) - 1);
+                                texCoords.push(texCoordLookup[ti], texCoordLookup[ti+1]); // add st coord
                             }
                             else if(indexStrings.length == 3) // vertex, texcoord and normal
                             {
                                 ni = 3 * (parseInt(indexStrings[2]) - 1);
-                                ti = 2 * (parseInt(indexStrings[1]) - 1);
                                 normals.push(normalLookup[ni], normalLookup[ni+1], normalLookup[ni+2]); // add normal
-                                texCoords.push(texCoordLookup[ti], texCoordLookup[ti+1]); // add st coord
+                                if(faceIndices[k].search("//") == -1) // has texCoord
+                                {
+                                    ti = 2 * (parseInt(indexStrings[1]) - 1);
+                                    texCoords.push(texCoordLookup[ti], texCoordLookup[ti+1]); // add st coord
+                                }
                             }
 
                             // add new index to the associative array
@@ -242,11 +240,41 @@ ObjModel.prototype =
                 } // end of if(tokens[0] == "f")
             } // end of for(i in lines)
 
+            // if norams are not defined, generate face normals
+            if(normals.length == 0)
+            {
+                let indexCount = indices.length;
+                let i1, i2, i3;
+                let v1, v2, v3;
+                for(let i = 0; i < indexCount; i += 3)
+                {
+                    i1 = indices[i] * 3;
+                    i2 = indices[i+1] * 3;
+                    i3 = indices[i+2] * 3;
+                    v1 = [vertices[i1], vertices[i1+1], vertices[i1+2]];
+                    v2 = [vertices[i2], vertices[i2+1], vertices[i2+2]];
+                    v3 = [vertices[i3], vertices[i3+1], vertices[i3+2]];
+                    let normal = ObjModel.generateFaceNormal(v1, v2, v3);
+                    normals[i1] = normals[i2] = normals[i3] = normal[0];
+                    normals[i1+1] = normals[i2+1] = normals[i3+1] = normal[1];
+                    normals[i1+2] = normals[i2+2] = normals[i3+2] = normal[2];
+                }
+            }
+
             // create new typed arrays
             self.vertices = new Float32Array(vertices);
             self.normals = new Float32Array(normals);
             self.texCoords = new Float32Array(texCoords);
-            self.indices = new Uint16Array(indices);
+            if((vertices.length / 3) <= 65536)
+            {
+                self.indices = new Uint16Array(indices);
+                self.indexType = 0x1403;
+            }
+            else
+            {
+                self.indices = new Uint32Array(indices);
+                self.indexType = 0x1405;
+            }
 
             // compute counters
             self.vertexCount = self.vertices.length / 3 || 0;
@@ -381,4 +409,21 @@ ObjModel.toVertices = function(obj)
     }
     //log("VERTEX COUNT: " + vertices.length);
     return vertices;
-};
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// class (static) function: generate face normal from 3 vertices
+// PARAM: references to 3 arrays of vertices
+///////////////////////////////////////////////////////////////////////////////
+ObjModel.generateFaceNormal = function(v1, v2, v3)
+{
+    let v12 = [v2[0]-v1[0], v2[1]-v1[1], v2[2]-v1[2]];
+    let v13 = [v3[0]-v1[0], v3[1]-v1[1], v3[2]-v1[2]];
+    let normal = [];
+    normal[0] = v12[1] * v13[2] - v12[2] * v13[1];
+    normal[1] = v12[2] * v13[0] - v12[0] * v13[2];
+    normal[2] = v12[0] * v13[1] - v12[1] * v13[0];
+    return normal;
+}
