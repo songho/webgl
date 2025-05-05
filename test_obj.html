@@ -682,16 +682,16 @@ function initGLSL(gl)
         gl.uniform1i(program.uniform.map0, 0);
 
         gl.shaderPrograms["phongTex"] = program;
+        frame();
     });
 
     createShaderProgram(gl, "files/glsl/gles_phong.vert", "files/glsl/gles_phong.frag").then(program =>
     {
         gl.shaderPrograms["phong"] = program;
+        frame();
     });
 
     gl.shadingModel = "phongTex";   // default shading
-
-    frame();
 }
 
 
