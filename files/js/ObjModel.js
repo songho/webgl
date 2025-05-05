@@ -251,13 +251,13 @@ ObjModel.prototype =
                     i1 = indices[i] * 3;
                     i2 = indices[i+1] * 3;
                     i3 = indices[i+2] * 3;
-                    v1 = [vertices[i1], vertices[i1+1], vertices[i1+2]];
-                    v2 = [vertices[i2], vertices[i2+1], vertices[i2+2]];
-                    v3 = [vertices[i3], vertices[i3+1], vertices[i3+2]];
+                    v1 = new Vector3(vertices[i1], vertices[i1+1], vertices[i1+2]);
+                    v2 = new Vector3(vertices[i2], vertices[i2+1], vertices[i2+2]);
+                    v3 = new Vector3(vertices[i3], vertices[i3+1], vertices[i3+2]);
                     let normal = ObjModel.generateFaceNormal(v1, v2, v3);
-                    normals[i1] = normals[i2] = normals[i3] = normal[0];
-                    normals[i1+1] = normals[i2+1] = normals[i3+1] = normal[1];
-                    normals[i1+2] = normals[i2+2] = normals[i3+2] = normal[2];
+                    normals[i1] = normals[i2] = normals[i3] = normal.x;
+                    normals[i1+1] = normals[i2+1] = normals[i3+1] = normal.y;
+                    normals[i1+2] = normals[i2+2] = normals[i3+2] = normal.z;
                 }
             }
 
@@ -415,15 +415,11 @@ ObjModel.toVertices = function(obj)
 
 ///////////////////////////////////////////////////////////////////////////////
 // class (static) function: generate face normal from 3 vertices
-// PARAM: references to 3 arrays of vertices
+// PARAM: 3 Vector3 objects
 ///////////////////////////////////////////////////////////////////////////////
 ObjModel.generateFaceNormal = function(v1, v2, v3)
 {
-    let v12 = [v2[0]-v1[0], v2[1]-v1[1], v2[2]-v1[2]];
-    let v13 = [v3[0]-v1[0], v3[1]-v1[1], v3[2]-v1[2]];
-    let normal = [];
-    normal[0] = v12[1] * v13[2] - v12[2] * v13[1];
-    normal[1] = v12[2] * v13[0] - v12[0] * v13[2];
-    normal[2] = v12[0] * v13[1] - v12[1] * v13[0];
-    return normal;
+    let v12 = v2.subtract(v1);
+    let v13 = v3.subtract(v1);
+    return Vector3.cross(v12, v13).normalize();
 }
