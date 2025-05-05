@@ -7,7 +7,7 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 4. [VBO](https://www.songho.ca/webgl/webgl_vbo.html): Vertex Buffer Object (VBO)
 5. [Ligiting](https://www.songho.ca/webgl/webgl_light.html): Ambient, Diffuse, Specular & Attenuation
 6. [Drawing Cube](https://www.songho.ca/webgl/webgl_cube.html): Draw a rotating cube with a texture map and vertex colors
-7. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render a OBJ file using ObjModel.js
+7. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render an OBJ file using ObjModel.js
 
 
 
