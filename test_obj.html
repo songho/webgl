@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html>
+
+<!-- ==========================================================================
+test for loading OBJ model with texture
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2011-12-16
+UPDATED: 2025-05-01
+===============================================================================
+-->
+
+<head>
+<title>Loading OBJ</title>
+<meta name="generator" content="editplus" />
+<meta name="author" content="Song Ho Ahn" />
+<meta name="keywords" content="" />
+<meta name="description" content="" />
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    box-sizing:border-box;
+}
+h3 {
+    margin-bottom:5px;
+}
+p {
+    margin:0 0 1em 0;
+}
+.contentblock {
+    display:flex;
+    position:absolute;
+    left:0px;
+    right:0px;
+    top:0px;
+    bottom:0px;
+    padding:10px;
+    line-height:0;
+}
+.mainblock {
+    position:relative;
+    flex:1 1 300px;
+    border:1px solid #ddd;
+}
+.rightblock {
+    flex:0 0 300px;
+    height:100%;
+    overflow:auto;
+    margin-left:10px;
+    line-height:110%;
+}
+#webglView {
+    width:100%;
+    height:100%;
+}
+#info {
+    position:absolute;
+    top:0;
+    right:0;
+    margin-top:5px;
+    margin-right:5px;
+    line-height:110%;
+}
+hr {
+    height:1px;
+    background-color:#aaa;
+    border:none;
+}
+.gridbox {
+    display:grid;
+    grid-template-columns:100px 195px;
+    gap:5px;
+    font-size:0.8em;
+}
+.gridcol1 {
+    text-align:right;
+    font-weight:bold;
+}
+.gridcol2 {
+    word-wrap:break-word;
+}
+/* tabs */
+.tabs {
+    display:flex;
+    flex-wrap:wrap;
+    width:100%;
+    background-color:#f8f8f8;
+    box-sizing:border-box;
+    padding:0;
+}
+.tabs input[type=radio] {
+    display:none;
+}
+.tablabel {
+    font-weight:bold;
+    cursor:pointer;
+    padding:10px 20px;
+    color:#666;
+    background-color:#f8f8f8;
+    transition:color 0.2s, background 0.2s;
+    border-top:3px solid transparent;
+    border-left:1px solid transparent;
+    border-right:1px solid transparent;
+    border-bottom:none;
+ }
+.tablabel:hover {
+    color:#000;
+    background-color:#ddd;
+}
+.tabs input:checked + .tablabel {
+    color:#000;
+    background-color:#fff;
+    border-top:2px solid #000;
+    border-left:1px solid #aaa;
+    border-right:1px solid #aaa;
+    border-bottom:1px solid #fff;
+    position:relative;
+    top:1px;
+}
+.tabs .tabcontent {
+    display:none;
+    width:100%;
+    margin:0;
+    padding:10px;
+    border:1px solid #aaa;
+    order:99;
+}
+.tabs input:checked + .tablabel + .tabcontent {
+    display:block;
+    background-color:#fff;
+}
+
+/* GUI */
+input[type="button"] {
+    width:100%;
+}
+ul.listbox {
+    margin:0;
+    padding:0;
+    list-style-type:none;
+    box-sizing:border-box;
+    border:1px dotted #666;
+    width:100%;
+}
+ul.listbox li {
+    padding:3px 0 3px 3px;
+}
+ul.listbox li:hover {
+    background-color:#ddd;
+    cursor:pointer;
+}
+ul.listbox li.activelist {
+    background-color:rgba(10, 132, 255, 1);
+    color:#fff;
+}
+
+</style>
+
+
+
+<!-- JavaScript -->
+<script type="text/javascript"src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script type="text/javascript" src="files/js/Vectors.js"></script>
+<script type="text/javascript" src="files/js/Matrices.js"></script>
+<script type="text/javascript" src="files/js/Quaternion.js"></script>
+<script type="text/javascript" src="files/js/Light.js"></script>
+<script type="text/javascript" src="files/js/Material.js"></script>
+<script type="text/javascript" src="files/js/MouseState.js"></script>
+<script type="text/javascript" src="files/js/ObjModel.js"></script>
+<script type="text/javascript" src="files/js/webglUtils.js"></script>
+
+
+
+
+<script type="text/javascript">
+
+// global vars
+let gl = null;
+
+// constants
+const CAMERA_Z = 300;
+const HOST_BASE = "127.0.0.1";
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// main entry point
+///////////////////////////////////////////////////////////////////////////////
+document.addEventListener("DOMContentLoaded", () =>
+{
+    let success = initWebGL("webglView");
+    if(!success)
+        return;
+
+    initDom();
+});
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init WebGL
+///////////////////////////////////////////////////////////////////////////////
+function initWebGL(canvasId)
+{
+    try{
+
+    let canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        let node = canvas.parentNode;
+        let message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        node.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                         message +
+                         "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // get gl context
+    gl = getContextGL(canvas)
+    if(!gl)
+    {
+        Logger.show();
+        log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // remember canvas
+    gl.canvas = canvas;
+
+    // init gl and glsl
+    initGL(gl);
+    initGLSL(gl);
+    log("WebGL is initialized.");
+
+    // init app ===============================================================
+
+    gl.nearPlane = 1;
+    gl.farPlane = 1000;
+
+    gl.obj = new ObjModel(gl);
+    gl.obj.read("files/models/torus_hard.obj").then(obj =>
+    {
+        log(obj);
+        initVBO(obj);
+        gl.obj.name = "torus_hard.obj";
+        displayObjInfo(obj);
+        obj.clearArrays();
+        frame();
+    }).catch(msg => { log(msg); });
+
+    // load a texture
+    gl.tex0 = loadTexture(gl, "files/images/grid512.png", false);
+    gl.textureUsed = true;
+
+    // add mouse state holder
+    gl.mouse = new MouseState();
+
+    // init touch states
+    gl.touches = [];
+
+    // register event handlers
+    window.addEventListener("resize",  handleResize);
+    log("Added window resize envent listener, handleResize().");
+    canvas.addEventListener("click", handleClick);
+    log("Added canvas click event listener, handleClick().");
+    // mouse events
+    canvas.addEventListener("mousemove", handleMouseMove);
+    log("Added canvas mousemove event listener, handleMouseMove().");
+    canvas.addEventListener("mousedown", handleMouseDown);
+    log("Added canvas mousedown event listener, handleMouseDown().");
+    canvas.addEventListener("mouseup", handleMouseUp);
+    log("Added canvas mouseup event listener, handleMouseUp().");
+    canvas.addEventListener("mouseout", handleMouseOut);
+    log("Added canvas mouseout event listener, handleMouseOut().");
+    canvas.addEventListener("contextmenu", handleContextMenu);
+    log("Added canvas contextmenu event listener, handleContextMenu().");
+    canvas.addEventListener("wheel", handleWheel);
+    log("Added canvas wheel event listeners, handleWheel()");
+    // canvas touch events
+    canvas.addEventListener("touchstart", handleTouchStart);
+    canvas.addEventListener("touchmove", handleTouchMove);
+    canvas.addEventListener("touchend", handleTouchEnd);
+    canvas.addEventListener("touchcancel", handleTouchCancel);
+    log("Added canvas touch events.");
+
+    // ready to start rendering loop
+    handleResize();
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+    }
+
+    return true;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // set active program
+    if(gl.textureUsed)
+    {
+        gl.program = gl.shaderPrograms["phongTex"];
+        if(!gl.program) return;
+        gl.useProgram(gl.program);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
+    }
+    else
+    {
+        gl.program = gl.shaderPrograms["phong"];
+        if(!gl.program) return;
+        gl.useProgram(gl.program);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+    }
+
+    // compute model-view transform
+    gl.matrixModel.identity();
+    gl.matrixModel.translate(-gl.obj.center.x, -gl.obj.center.y, -gl.obj.center.z);
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+
+    // compute normal matrix
+    gl.matrixNormal = gl.matrixModelView.clone();
+    gl.matrixNormal.setTranslation(0,0,0); // remove tranlsation part
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+
+    // compute model-view-projection matrix
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    // pass light position
+    gl.uniform4fv(gl.program.uniform.lightPosition, gl.light.position.toFloat32Array());
+
+    // pass light color
+    gl.uniform4fv(gl.program.uniform.lightColor, gl.light.getColor());
+
+    // pass light attenuation uniform array
+    gl.uniform3fv(gl.program.uniform.lightAttenuation, gl.light.getAttenuations());
+
+    // pass material
+    gl.uniform4fv(gl.program.uniform.materialAmbient, gl.material.getAmbient());
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material.getDiffuse());
+    gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material.getSpecular());
+    gl.uniform1f(gl.program.uniform.materialShininess, gl.material.shininess);
+
+    // draw model
+    if(gl.vbo && gl.ibo)
+    {
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.vbo);
+        gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, gl.vbo.normalOffset);
+        if(gl.textureUsed)
+        {
+            gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 0, gl.vbo.texCoordOffset);
+        }
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.ibo);
+        gl.drawElements(gl.TRIANGLES, gl.ibo.indexCount, gl.obj.indexType, 0);
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// post frame
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the canvas is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize()
+{
+    // resize window to fit to parent
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, gl.nearPlane, gl.farPlane);
+
+    frame();
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handlers for mouse event
+///////////////////////////////////////////////////////////////////////////////
+function handleMouseMove(e)
+{
+    // get current mouse position
+    let offset = getElementOffset(this);
+    let mouseX = e.clientX - offset.x;
+    let mouseY = e.clientY - offset.y;
+    let deltaX = mouseX - gl.mouse.x;
+    let deltaY = mouseY - gl.mouse.y;
+    //log("mouse:" + mouseX + ", " + mouseY + "   " + "delta:" + deltaX + ", " + deltaY);
+
+    // rotate camera
+    if(gl.mouse.leftDown)
+    {
+        gl.camera.angle.y += (mouseX - gl.mouse.x) * 0.01;
+        gl.camera.angle.x += (mouseY - gl.mouse.y) * 0.01;
+    }
+    if(gl.mouse.rightDown)
+    {
+        gl.camera.distance -= (mouseY - gl.mouse.y) * gl.obj.radius *0.01;
+    }
+    gl.mouse.x = mouseX;
+    gl.mouse.y = mouseY;
+    //log(gl.mouse);
+
+    // update view matrix
+    if(gl.mouse.leftDown || gl.mouse.rightDown)
+    {
+        gl.matrixView.identity();
+        gl.matrixView.rotateY(gl.camera.angle.y);
+        gl.matrixView.rotateX(gl.camera.angle.x);
+        gl.matrixView.translate(0, 0, -gl.camera.distance);
+        frame();
+    }
+}
+
+function handleMouseDown(e)
+{
+    gl.mouse.downX = gl.mouse.x;
+    gl.mouse.downY = gl.mouse.y;
+
+    if(e.button == 0) gl.mouse.leftDown = true;    // primary
+    if(e.button == 1) gl.mouse.middleDown = true;  // auxiliary
+    if(e.button == 2) gl.mouse.rightDown = true;   // secondary
+
+    e.preventDefault(); // disable context menu
+}
+
+function handleMouseUp(e)
+{
+    if(e.button == 0) gl.mouse.leftDown = false;
+    if(e.button == 1) gl.mouse.middleDown = false;
+    if(e.button == 2) gl.mouse.rightDown = false;
+    //e.preventDefault(); // disable context menu
+}
+
+function handleWheel(e)
+{
+    // positive deltaY = wheel down
+    // negative deltaY = wheel up
+    if(e.deltaY != 0)
+    {
+        let deltaDistance = e.deltaY * gl.obj.radius * 0.01;
+        gl.camera.distance += deltaDistance;
+        if(gl.cameraDistance < gl.nearPlane)
+            gl.cameraDistance = gl.nearPlane;
+        else if(gl.camera.distance > gl.farPlane)
+            gl.camera.distance = gl.farPlane;
+
+        gl.matrixView.identity();
+        gl.matrixView.rotateY(gl.camera.angle.y);
+        gl.matrixView.rotateX(gl.camera.angle.x);
+        gl.matrixView.translate(0, 0, -gl.camera.distance);
+        frame();
+    }
+
+    e.preventDefault();
+}
+
+function handleMouseOut(e)
+{
+    gl.mouse.leftDown = false;
+    gl.mouse.rightDown = false;
+}
+
+function handleClick(e)
+{
+}
+
+
+function handleContextMenu(e)
+{
+    e.preventDefault(); // disable context menu
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handle touch events
+///////////////////////////////////////////////////////////////////////////////
+function handleTouchStart(e)
+{
+    e.preventDefault();
+
+    let touches = e.changedTouches;
+    for(let i = 0; i < touches.length; ++i)
+    {
+        gl.touches.push(copyTouch(touches[i]));
+        gl.touches.distance = 0;
+    }
+
+    if(gl.touches.length == 1)
+        gl.touches.downTouch = copyTouch(gl.touches[0]);
+}
+
+function handleTouchMove(e)
+{
+    e.preventDefault();
+
+    let touches = e.changedTouches;
+    let touch1, touch2; // current touches
+
+    for(let i = 0; i < touches.length; ++i)
+    {
+        //log("Touch Moved:" + findTouchIndex(touches[i]));
+        let index = findTouchIndex(touches[i]);
+        if(index == 0)
+            touch1 = touches[i];
+        else if(index == 1)
+            touch2 = touches[i];
+    }
+
+    if(gl.touches.length == 2)
+    {
+        // pan or zoom camera
+    }
+    else if(gl.touches.length == 1)
+    {
+        // rotate camera
+        // update position
+        gl.touches[0].pageX = touch1.pageX;
+        gl.touches[0].pageY = touch1.pageY;
+    }
+}
+
+function handleTouchEnd(e)
+{
+    e.preventDefault();
+
+    let touches = e.changedTouches;
+    for(let i = 0; i < touches.length; ++i)
+    {
+        let index = findTouchIndex(touches[i]);
+        if(index >= 0) // found
+        {
+            gl.touches.splice(index, 1);    // remove
+        }
+    }
+
+    if(gl.touches.length > 0)
+        gl.touches.downTouch = copyTouch(gl.touches[0]);
+}
+
+function handleTouchCancel(e)
+{
+    gl.touches.length = 0;
+   //log("Touch canceled.");
+}
+
+function handleTouchLeave(e)
+{
+    gl.touches.length = 0;
+    //log("Touch left.");
+}
+
+function copyTouch(touch)
+{
+    return {identifier:touch.identifier, pageX:touch.pageX, pageY:touch.pageY};
+}
+
+function findTouchIndex(touch)
+{
+    for(let i = 0; i < gl.touches.length; ++i)
+    {
+        if(touch.identifier == gl.touches[i].identifier)
+            return i;
+    }
+    return -1;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL(gl)
+{
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);   // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+    gl.cullFace(gl.BACK);
+
+    // default light
+    gl.light = new Light(0, 0, 1, 0);
+    gl.light.color.set(1.0, 1.0, 1.0, 1.0);     // light color
+    gl.light.attenuations.set(1, 0, 0);         // attenuations (constant, linear, quad)
+    log(gl.light);
+
+    // default material
+    gl.material = new Material(0.7, 0.7, 0.7, 1.0); // with default diffuse
+    gl.material.ambient.set(0.2, 0.2, 0.2, 1.0);
+    gl.material.specular.set(1.0, 1.0, 1.0, 1);
+    gl.material.shininess = 128;
+    log(gl.material);
+
+    // camera
+    gl.camera = {};
+    gl.camera.angle = new Vector2(0, 0);
+    gl.camera.distance = CAMERA_Z;
+
+    // init matrices
+    gl.matrixView = new Matrix4();
+    gl.matrixView.rotateY(gl.camera.angle.y);
+    gl.matrixView.rotateX(gl.camera.angle.x);
+    gl.matrixView.translate(0, 0, -gl.camera.distance);
+
+    gl.matrixModel = new Matrix4();
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+
+    // init projection matrix and viewport
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, 1, 2000);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL(gl)
+{
+    initVertexAttribArrays(gl); // enable all attribs
+
+    // load shaders
+    gl.shaderPrograms = {}; // associative array
+
+    // load phong shader with 1 texture
+    createShaderProgram(gl, "files/glsl/gles_phongTex.vert", "files/glsl/gles_phongTex.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform1i(program.uniform.map0, 0);
+
+        gl.shaderPrograms["phongTex"] = program;
+    });
+
+    createShaderProgram(gl, "files/glsl/gles_phong.vert", "files/glsl/gles_phong.frag").then(program =>
+    {
+        gl.shaderPrograms["phong"] = program;
+    });
+
+    gl.shadingModel = "phongTex";   // default shading
+
+    frame();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create vbo for OBJ model
+///////////////////////////////////////////////////////////////////////////////
+function initVBO(obj)
+{
+    gl.obj.volume = computeVolume(obj.vertices, obj.indices);
+    gl.obj.area = computeArea(obj.vertices, obj.indices);
+    log("\nVolume: " + gl.obj.volume);
+    log("  Area: " + gl.obj.area);
+
+    // re-normalize normals
+    obj.normalize();
+    log("Re-normalized the surface normals of OBJ.");
+
+    if(!gl.vbo)
+        gl.vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vbo);
+    let dataSize = obj.vertices.byteLength + obj.normals.byteLength + obj.texCoords.byteLength; // total # of bytes
+    gl.bufferData(gl.ARRAY_BUFFER, dataSize, gl.STATIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, obj.vertices);
+    gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength, obj.normals);
+    gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength + obj.normals.byteLength, obj.texCoords);
+    gl.vbo.normalOffset = obj.vertices.byteLength;
+    gl.vbo.texCoordOffset = obj.vertices.byteLength + obj.normals.byteLength;
+
+    if(!gl.ibo)
+        gl.ibo = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, obj.indices, gl.STATIC_DRAW);
+    gl.ibo.indexCount = obj.indices.length;
+
+    // reset camera
+    gl.camera.distance = obj.radius * 2.5;
+    gl.camera.angle = new Vector2(0, 0);
+    gl.matrixView.identity();
+    gl.matrixView.translate(0, 0, -gl.camera.distance);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init DOM elements
+///////////////////////////////////////////////////////////////////////////////
+function initDom()
+{
+    let fileObj = document.getElementById("fileObj");
+    fileObj.value = "";
+    fileObj.addEventListener("change", () =>
+    {
+        let file = fileObj.files[0];
+        let fileUrl = window.URL.createObjectURL(file);
+        gl.obj.name = file.name;
+        loadObjFile(fileUrl);
+    });
+
+    let checkTexture = document.getElementById("checkTexture");
+    checkTexture.checked = gl.textureUsed;
+    checkTexture.addEventListener("change", () =>
+    {
+        gl.textureUsed = checkTexture.checked;
+        frame();
+    });
+
+    let objList = document.querySelectorAll("ul.listbox > li");
+    objList.forEach(li =>
+    {
+        objList.forEach(e => e.classList.remove("activelist"));
+        li.addEventListener("click", () =>
+        {
+            // remove prev active
+            objList.forEach(e => e.classList.remove("activelist"));
+            // add active on selected list
+            li.classList.add("activelist");
+            gl.obj.name = li.id
+            loadObjFile("files/models/" + li.id);
+        });
+    });
+
+    let buttonReset = document.getElementById("reset");
+    buttonReset.addEventListener("click", () =>
+    {
+        loadObjFile("files/models/torus_hard.obj");
+        objList.forEach(e => e.classList.remove("activelist"));
+    });
+
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function loadObjFile(file)
+{
+    gl.obj.read(file).then(obj  =>
+    {
+        log(obj);
+
+        initVBO(obj);
+        displayObjInfo(obj);
+
+        let checkTexture = document.getElementById("checkTexture");
+        if(obj.texCoordCount == 0)
+        {
+            checkTexture.disabled = true;
+            gl.textureUsed = false;
+        }
+        else
+        {
+            checkTexture.disabled = false;
+            if(checkTexture.checked)
+                gl.textureUsed = true;
+        }
+
+        frame();
+        // clear arrays after copy data to webgl
+        obj.clearArrays();
+    });
+}
+
+function displayObjInfo(obj)
+{
+    let textName = document.getElementById("textName");
+    let textTriangles = document.getElementById("textTriangles");
+    let textVertices = document.getElementById("textVertices");
+    let textNormals = document.getElementById("textNormals");
+    let textTexCoords = document.getElementById("textTexCoords");
+    let textIndices = document.getElementById("textIndices");
+    let textRadius = document.getElementById("textRadius");
+    let textCenter = document.getElementById("textCenter");
+    //let textArea = document.getElementById("textArea");
+    //let textVolume = document.getElementById("textVolume");
+
+    textName.innerHTML = gl.obj.name;
+    textTriangles.innerHTML = obj.triangleCount + " tris";
+    textIndices.innerHTML = obj.indexCount;
+    textVertices.innerHTML = obj.vertexCount;
+    textNormals.innerHTML = obj.normalCount;
+    textTexCoords.innerHTML = obj.texCoordCount;
+    textCenter.innerHTML = "(" + obj.center.x.toFixed(3) + ", " + obj.center.y.toFixed(3) + ", " + obj.center.z.toFixed(3) + ")";
+    textRadius.innerHTML = obj.radius.toFixed(3);
+    //textVolume.innerHTML = gl.obj.volume.toFixed(3);
+    //textArea.innerHTML = gl.obj.area.toFixed(3);
+}
+
+</script>
+
+</head>
+
+<body>
+
+<div class="contentblock">
+
+<div class="mainblock">
+<canvas id="webglView" width="512" height="512">
+</canvas>
+</div>
+<!-- end of mainblock -->
+
+<div class="rightblock">
+<h2>
+WebGL Loading OBJ
+</h2>
+
+<label for="fileObj">Choose OBJ File: </label>
+<input type="file" id="fileObj" name="fileObj" value="" accept=".obj">
+<br>
+<br>
+<label><input style="margin-bottom:10px;" type="checkbox" id="checkTexture">Show Default Texture</label>
+
+<h3>
+OBJ: <span id="textName"></span>
+</h3>
+<div class="gridbox">
+<div class="gridcol1"># of Triangles:</div><div id="textTriangles" class="gridcol2"></div>
+<div class="gridcol1"># of Vertices:</div><div id="textVertices" class="gridcol2"></div>
+<div class="gridcol1"># of Normals:</div><div id="textNormals" class="gridcol2"></div>
+<div class="gridcol1"># of TexCoords:</div><div id="textTexCoords" class="gridcol2"></div>
+<div class="gridcol1"># of Indices:</div><div id="textIndices" class="gridcol2"></div>
+<div class="gridcol1">Center:</div><div id="textCenter" class="gridcol2"></div>
+<div class="gridcol1">Radius:</div><div id="textRadius" class="gridcol2"></div>
+<!--
+<div class="gridcol1">Volume:</div><div id="textVolume" class="gridcol2"></div>
+<div class="gridcol1">Area:</div><div id="textArea" class="gridcol2"></div>
+-->
+</div>
+<input type="button" name="reset" id="reset" value="Reset OBJ">
+
+<hr>
+
+<h3>
+Sample OBJs
+</h3>
+<ul class="listbox">
+<li id="debugger_50k.obj">debugger_50k.obj</li>
+<li id="Totoro_100k.obj">Totoro_100k.obj</li>
+<li id="Beethoven_100k.obj">Beethoven_100k.obj</li>
+<li id="dragon.obj">dragon.obj</li>
+<li id="sphere.obj">sphere.obj</li>
+<li id="cube_quads.obj">cube_quads.obj</li>
+</ul>
+
+
+</div>
+<!-- end of rightblock -->
+
+</div> <!-- end of contentblock -->
+</body>
+</html>
