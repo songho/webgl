@@ -17,6 +17,7 @@ UPDATED: 2025-04-23
 <meta name="keywords" content="" />
 <meta name="description" content="" />
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
 <!-- CSS -->
 <style type="text/css">
@@ -57,6 +58,7 @@ p {
 #webglView {
     width:100%;
     height:100%;
+    touch-action:none; /* prevent browser handle pointer events */
 }
 #info {
     position:absolute;
@@ -183,11 +185,7 @@ input[type="button"] {
 <script type="text/javascript" src="files/js/Quaternion.js"></script>
 <script type="text/javascript" src="files/js/Light.js"></script>
 <script type="text/javascript" src="files/js/Material.js"></script>
-<script type="text/javascript" src="files/js/MouseState.js"></script>
-<script type="text/javascript" src="files/js/Trackball.js"></script>
 <script type="text/javascript" src="files/js/ObjModel.js"></script>
-<script type="text/javascript" src="files/js/Camera.js"></script>
-<script type="text/javascript" src="files/js/AnimationMode.js"></script>
 <script type="text/javascript" src="files/js/webglUtils.js"></script>
 
 <script type="text/javascript">
@@ -275,36 +273,29 @@ function initWebGL(canvasId)
     // load a texture and redraw the scene after it is loaded
     gl.tex0 = loadTexture(gl, "files/images/grid512.png", false, frame);
 
-    // add mouse state holder
-    gl.mouse = new MouseState();
-
-    // init touch states
-    gl.touches = [];
+    // init array of pointer objects
+    gl.pointers = [];
 
     // register event handlers
     window.addEventListener("resize",  handleResize);
     log("Added window resize envent listener, handleResize().");
     canvas.addEventListener("click", handleClick);
     log("Added canvas click event listener, handleClick().");
-    // mouse events
-    canvas.addEventListener("mousemove", handleMouseMove);
-    log("Added canvas mousemove event listener, handleMouseMove().");
-    canvas.addEventListener("mousedown", handleMouseDown);
-    log("Added canvas mousedown event listener, handleMouseDown().");
-    canvas.addEventListener("mouseup", handleMouseUp);
-    log("Added canvas mouseup event listener, handleMouseUp().");
-    canvas.addEventListener("mouseout", handleMouseOut);
-    log("Added canvas mouseout event listener, handleMouseOut().");
     canvas.addEventListener("contextmenu", handleContextMenu);
     log("Added canvas contextmenu event listener, handleContextMenu().");
     canvas.addEventListener("wheel", handleWheel);
     log("Added canvas wheel event listeners, handleWheel()");
-    // canvas touch events
-    canvas.addEventListener("touchstart", handleTouchStart);
-    canvas.addEventListener("touchmove", handleTouchMove);
-    canvas.addEventListener("touchend", handleTouchEnd);
-    canvas.addEventListener("touchcancel", handleTouchCancel);
-    log("Added canvas touch events.");
+    // canvas pointer events
+    canvas.addEventListener("pointerdown", handlePointerDown, false);
+    log("Added canvas pointerdown event listeners, handlePointerDown()");
+    canvas.addEventListener("pointerup", handlePointerUp, false);
+    log("Added canvas pointerup event listeners, handlePointerUp()");
+    canvas.addEventListener("pointermove", handlePointerMove, false);
+    log("Added canvas pointermove event listeners, handlePointerMove()");
+    canvas.addEventListener("pointercancel", handlePointerCancel, false);
+    log("Added canvas pointercancel event listeners, handlePointerCancel()");
+    canvas.addEventListener("pointerleave", handlePointerLeave, false);
+    log("Added canvas pointerleave event listeners, handlePointerLeave()");
 
     handleResize();
 
@@ -521,54 +512,6 @@ function handleResize()
 ///////////////////////////////////////////////////////////////////////////////
 // handlers for mouse event
 ///////////////////////////////////////////////////////////////////////////////
-function handleMouseMove(e)
-{
-    //e = e || window.event; // hack for IE
-    let x = e.clientX - this.offsetLeft;
-    let y = e.clientY - this.offsetTop;
-
-    // rotate model
-    if(gl.mouse.leftDown)
-    {
-        gl.camera.angle.y += (x - gl.mouse.x) / gl.canvas.height * 2;
-        gl.camera.angle.x += (y - gl.mouse.y) / gl.canvas.height * 2;
-    }
-    if(gl.mouse.rightDown)
-    {
-        gl.camera.distance -= (y - gl.mouse.y) * 0.1;
-    }
-    gl.mouse.x = x;
-    gl.mouse.y = y;
-    //log(gl.mouse);
-
-    // update view matrix
-    if(gl.mouse.leftDown || gl.mouse.rightDown)
-    {
-        gl.matrixView.identity();
-        gl.matrixView.rotateY(gl.camera.angle.y);
-        gl.matrixView.rotateX(gl.camera.angle.x);
-        gl.matrixView.translate(0, 0, -gl.camera.distance);
-        frame();
-    }
-}
-
-function handleMouseDown(e)
-{
-    if(e.button == 0) gl.mouse.leftDown = true;    // primary
-    if(e.button == 1) gl.mouse.middleDown = true;  // auxiliary
-    if(e.button == 2) gl.mouse.rightDown = true;   // secondary
-
-    e.preventDefault(); // disable context menu
-}
-
-function handleMouseUp(e)
-{
-    if(e.button == 0) gl.mouse.leftDown = false;
-    if(e.button == 1) gl.mouse.middleDown = false;
-    if(e.button == 2) gl.mouse.rightDown = false;
-    //e.preventDefault(); // disable context menu
-}
-
 function handleWheel(e)
 {
     // positive deltaY = wheel down
@@ -577,8 +520,8 @@ function handleWheel(e)
     {
         let deltaDistance = e.deltaY * 0.1;
         gl.camera.distance += deltaDistance;
-        if(gl.cameraDistance < gl.nearPlane)
-            gl.cameraDistance = gl.nearPlane;
+        if(gl.camera.distance < gl.nearPlane)
+            gl.camera.distance = gl.nearPlane;
         else if(gl.camera.distance > gl.farPlane)
             gl.camera.distance = gl.farPlane;
 
@@ -590,12 +533,6 @@ function handleWheel(e)
     }
 
     e.preventDefault();
-}
-
-function handleMouseOut(e)
-{
-    gl.mouse.leftDown = false;
-    gl.mouse.rightDown = false;
 }
 
 function handleClick(e)
@@ -610,96 +547,137 @@ function handleContextMenu(e)
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// handle touch events
+// handle pointer events: input is PointerEvent object
 ///////////////////////////////////////////////////////////////////////////////
-function handleTouchStart(e)
+function handlePointerDown(pe)
 {
-    e.preventDefault();
+    pe.preventDefault();    // prevent pointer event being delivered
 
-    let touches = e.changedTouches;
-    for(let i = 0; i < touches.length; ++i)
+    let offset = getElementOffset(this);    // get canvas offset
+    gl.pointers.push(copyPointer(pe, offset));
+
+    // remember down pointer and angles when pointer down
+    if(gl.pointers.length == 1)
     {
-        gl.touches.push(copyTouch(touches[i]));
-        gl.touches.distance = 0;
+        gl.camera.pointerAngle = gl.camera.angle.clone();
+        gl.pointers.downs = []; // clear
+        gl.pointers.downs.push(copyPointer(pe, offset));
+        // handle right mouse button(0=left, 2=right)
+        gl.pointers[0].button = pe.button;
     }
-
-    if(gl.touches.length == 1)
-        gl.touches.downTouch = copyTouch(gl.touches[0]);
-}
-
-function handleTouchMove(e)
-{
-    e.preventDefault();
-
-    let touches = e.changedTouches;
-    let touch1, touch2; // current touches
-
-    for(let i = 0; i < touches.length; ++i)
+    else if(gl.pointers.length == 2)
     {
-        //log("Touch Moved:" + findTouchIndex(touches[i]));
-        let index = findTouchIndex(touches[i]);
-        if(index == 0)
-            touch1 = touches[i];
-        else if(index == 1)
-            touch2 = touches[i];
-    }
-
-    if(gl.touches.length == 2)
-    {
-        // pan or zoom camera
-    }
-    else if(gl.touches.length == 1)
-    {
-        // rotate camera
-        // update position
-        gl.touches[0].pageX = touch1.pageX;
-        gl.touches[0].pageY = touch1.pageY;
+        // remember second pointer
+        gl.pointers.downs.push(copyPointer(pe, offset));
     }
 }
 
-function handleTouchEnd(e)
+function handlePointerUp(pe)
 {
-    e.preventDefault();
+    pe.preventDefault();    // prevent pointer event being delivered
 
-    let touches = e.changedTouches;
-    for(let i = 0; i < touches.length; ++i)
+    // get array index matching from gl.pointers
+    let index = gl.pointers.findIndex(pointer => pointer.id == pe.pointerId);
+    if(index >= 0) // found
     {
-        let index = findTouchIndex(touches[i]);
-        if(index >= 0) // found
+        gl.pointers.splice(index, 1);   // remove it
+        gl.pointers.distance = 0;       // clear
+    }
+}
+
+function handlePointerMove(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    // get the current moving pointer and replace it in the array
+    let offset = getElementOffset(this);    // get canvas offset
+    let index = gl.pointers.findIndex(p => p.id == pe.pointerId);
+    if(index >= 0)
+    {
+        // remember delta movement
+        gl.pointers[index].delta = new Vector2((pe.pageX - offset.x) - gl.pointers[index].x, (pe.pageY - offset.y) - gl.pointers[index].y);
+        // update
+        gl.pointers[index].x = pe.pageX - offset.x;
+        gl.pointers[index].y = pe.pageY - offset.y;
+    }
+
+    // if 2 pointers, perform zoom
+    if(gl.pointers.length == 2)
+    {
+        const SCALE_ZOOM = 0.1;
+
+        let d1 = gl.pointers[0].delta.normalize();
+        let d2 = gl.pointers[1].delta.normalize();
+        let dir = d1.add(d2).normalize();   // sum vector of 2 delta vectors
+        let v = new Vector2(gl.pointers[1].x - gl.pointers[0].x, gl.pointers[1].y - gl.pointers[0].y);
+        let dist = v.length();              // distance of 2 vectors
+
+        // zoom camera if opposite direction
+        let deltaDistance = 0;
+        if(gl.pointers.distance > 0)
+            deltaDistance = dist - gl.pointers.distance;
+        gl.pointers.distance = dist;     // remember
+        gl.camera.distance -= deltaDistance * SCALE_ZOOM;
+
+        // update camera
+        gl.matrixView.identity();
+        gl.matrixView.rotateY(gl.camera.angle.y);
+        gl.matrixView.rotateX(gl.camera.angle.x);
+        gl.matrixView.translate(0, 0, -gl.camera.distance);
+        frame();
+    }
+
+    // if 1 down, perform rotate
+    else if(gl.pointers.length == 1)
+    {
+        const SCALE_ROTATE = 0.01;
+        const SCALE_ZOOM = 0.1;
+
+        // zoom if dragging right mouse button
+        if(pe.pointerType == "mouse" && gl.pointers[0].button == 2)
         {
-            gl.touches.splice(index, 1);    // remove
+            let delta = gl.pointers[0].delta.normalize();
+            delta = delta.scale(SCALE_ZOOM);
+            gl.camera.distance += delta.y;
+
+            // update camera
+            gl.matrixView.identity();
+            gl.matrixView.rotateY(gl.camera.angle.y);
+            gl.matrixView.rotateX(gl.camera.angle.x);
+            gl.matrixView.translate(0, 0, -gl.camera.distance);
+            frame();
+        }
+        else
+        {
+            gl.camera.angle.x = gl.camera.pointerAngle.x + (gl.pointers[0].y - gl.pointers.downs[0].y) * SCALE_ROTATE;
+            gl.camera.angle.y = gl.camera.pointerAngle.y + (gl.pointers[0].x - gl.pointers.downs[0].x) * SCALE_ROTATE;
+
+            // update camera
+            gl.matrixView.identity();
+            gl.matrixView.rotateY(gl.camera.angle.y);
+            gl.matrixView.rotateX(gl.camera.angle.x);
+            gl.matrixView.translate(0, 0, -gl.camera.distance);
+            frame();
         }
     }
-
-    if(gl.touches.length > 0)
-        gl.touches.downTouch = copyTouch(gl.touches[0]);
 }
 
-function handleTouchCancel(e)
+function handlePointerCancel(pe)
 {
-    gl.touches.length = 0;
-   //log("Touch canceled.");
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
 }
 
-function handleTouchLeave(e)
+function handlePointerLeave(pe)
 {
-    gl.touches.length = 0;
-    //log("Touch left.");
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
 }
 
-function copyTouch(touch)
+function copyPointer(pe, offset={x:0,y:0})
 {
-    return {identifier:touch.identifier, pageX:touch.pageX, pageY:touch.pageY};
-}
-
-function findTouchIndex(touch)
-{
-    for(let i = 0; i < gl.touches.length; ++i)
-    {
-        if(touch.identifier == gl.touches[i].identifier)
-            return i;
-    }
-    return -1;
+    // return pointer data
+    return {id:pe.pointerId, x:pe.clientX - offset.x, y:pe.clientY - offset.y};
 }
 
 
