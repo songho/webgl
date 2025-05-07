@@ -7,7 +7,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2012-01-16
-// UPDATED: 2021-09-16
+// UPDATED: 2025-05-06
 ///////////////////////////////////////////////////////////////////////////////
 
 let OrbitCamera = function(px, py, pz, tx, ty, tz)
@@ -321,10 +321,10 @@ OrbitCamera.prototype =
     shift: function(delta, duration, mode, callback)
     {
         let l = new Vector3(-this.matrix.m[0], -this.matrix.m[4], -this.matrix.m[8]);
-        let u = new Vector3(-this.matrix.m[1], -this.matrix.m[5], -this.matrix.m[9]);
+        let u = new Vector3(this.matrix.m[1], this.matrix.m[5], this.matrix.m[9]);
 
         let v = l.clone().scale(delta.x);
-        v.add(u.clone().scale(-delta.y));
+        v.add(u.clone().scale(delta.y));
 
         // find new target position
         v.add(this.target);
@@ -336,10 +336,10 @@ OrbitCamera.prototype =
     startShift: function(dir, accel)
     {
         let l = new Vector3(-this.matrix.m[0], -this.matrix.m[4], -this.matrix.m[8]);
-        let u = new Vector3(-this.matrix.m[1], -this.matrix.m[5], -this.matrix.m[9]);
+        let u = new Vector3(this.matrix.m[1], this.matrix.m[5], this.matrix.m[9]);
 
         let v = l.clone().scale(dir.x);
-        v.add(u.clone().scale(-dir.y));
+        v.add(u.clone().scale(dir.y));
         v.normalize();
 
         if(this.shifting)
