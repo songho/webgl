@@ -437,6 +437,7 @@ function handleWheel(e)
         gl.matrixView.rotateY(gl.camera.angle.y);
         gl.matrixView.rotateX(gl.camera.angle.x);
         gl.matrixView.translate(0, 0, -gl.camera.distance);
+        gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
         frame();
     }
 
@@ -532,6 +533,7 @@ function handlePointerMove(pe)
         gl.matrixView.rotateY(gl.camera.angle.y);
         gl.matrixView.rotateX(gl.camera.angle.x);
         gl.matrixView.translate(0, 0, -gl.camera.distance);
+        gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
         frame();
     }
 
@@ -539,20 +541,25 @@ function handlePointerMove(pe)
     else if(gl.pointers.length == 1)
     {
         const SCALE_ROTATE = 0.01;
-        const SCALE_ZOOM = 0.1;
+        const SCALE_SHIFT = 0.01;
 
-        // zoom if dragging right mouse button
+        // shift if dragging right mouse button
         if(pe.pointerType == "mouse" && gl.pointers[0].button == 2)
         {
             let delta = gl.pointers[0].delta.normalize();
-            delta = delta.scale(SCALE_ZOOM);
-            gl.camera.distance += delta.y;
+            delta = delta.scale(gl.obj.radius * SCALE_SHIFT);
+
+            let l = new Vector3(-gl.matrixView.m[0], -gl.matrixView.m[4], -gl.matrixView.m[8]);
+            let u = new Vector3(gl.matrixView.m[1], gl.matrixView.m[5], gl.matrixView.m[9]);
+            let t = l.scale(delta.x).add(u.scale(delta.y));
+            gl.camera.target.add(new Vector3(t.x, t.y, 0));
 
             // update camera
             gl.matrixView.identity();
             gl.matrixView.rotateY(gl.camera.angle.y);
             gl.matrixView.rotateX(gl.camera.angle.x);
             gl.matrixView.translate(0, 0, -gl.camera.distance);
+            gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
             frame();
         }
         else
@@ -565,6 +572,7 @@ function handlePointerMove(pe)
             gl.matrixView.rotateY(gl.camera.angle.y);
             gl.matrixView.rotateX(gl.camera.angle.x);
             gl.matrixView.translate(0, 0, -gl.camera.distance);
+            gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
             frame();
         }
     }
@@ -618,6 +626,7 @@ function initGL(gl)
     // camera
     gl.camera = {};
     gl.camera.angle = new Vector2(0, 0);
+    gl.camera.target = new Vector3(0, 0, 0);
     gl.camera.distance = CAMERA_Z;
 
     // init matrices
@@ -625,6 +634,7 @@ function initGL(gl)
     gl.matrixView.rotateY(gl.camera.angle.y);
     gl.matrixView.rotateX(gl.camera.angle.x);
     gl.matrixView.translate(0, 0, -gl.camera.distance);
+    gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
 
     gl.matrixModel = new Matrix4();
     gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
@@ -702,9 +712,11 @@ function initVBO(obj)
 
     // reset camera
     gl.camera.distance = obj.radius * 2.5;
-    gl.camera.angle = new Vector2(0, 0);
+    gl.camera.angle.set(0, 0);
+    gl.camera.target.set(0, 0, 0);
     gl.matrixView.identity();
     gl.matrixView.translate(0, 0, -gl.camera.distance);
+    gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
 }
 
 
