@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- ==========================================================================
+testing OrbitCamera
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2013-10-24
+UPDATED: 2020-05-27
+===============================================================================
+-->
+
+<head>
+<title>Orbit Camera</title>
+<meta name="generator" content="editplus" />
+<meta name="author" content="Song Ho Ahn" />
+<meta name="keywords" content="" />
+<meta name="description" content="" />
+<meta charset="utf-8">
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+}
+p {
+    margin-top:0;
+}
+h4 {
+    margin:0;
+}
+.noselect {
+	-webkit-user-select:none;
+	-moz-user-select:none;
+	-ms-user-select:none;
+	user-select:none;
+}
+
+.contentblock {
+    position:absolute;
+    left:0px;
+    right:0px;
+    top:0px;
+    bottom:0px;
+}
+
+.webglblock {
+	position:absolute;
+	left:10px;
+	right:10px;
+	top:10px;
+	bottom:10px;
+    line-height:0;
+}
+#webglView {
+    /* to fix smaller canvas width */
+    width:100%;
+    height:100%;
+    border:1px solid #ccc;
+    box-sizing:border-box;
+}
+#fps {
+    position:absolute;
+    top:0;
+    right:1px;
+    font-size:12px;
+    color:#666;
+    line-height:1.2em;
+    /*margin:0.2em;*/
+}
+
+.camInfo {
+    position:absolute;
+    top:2px;
+    left:2px;
+    font-size:14px;
+    line-height:120%;
+}
+.camWrap {
+    position:absolute;
+    bottom:70px;
+    left:0px;
+    margin-top:5px;
+    margin-left:5px;
+}
+.camControl {
+    position:absolute;
+    width:30px;
+    height:30px;
+    line-height:28px;
+    box-sizing:border-box;
+    color:#666;
+    font-size:20px;
+    text-align:center;
+    border:1px solid #666;
+    cursor:pointer;
+    user-select:none;
+    -moz-user-select:none;
+}
+.camControl:hover {
+    color:#000;
+    background-color:rgba(0, 0, 0, 0.05);
+    border:1px solid #000;
+}
+.camControl:active {
+    background-color:rgba(0, 0, 0, 0.15);
+    text-shadow: 0px 1px 1px #666;
+}
+#camShiftL {
+	left:0px;
+	top:35px;
+}
+#camShiftU {
+	left:35px;
+	top:0px;
+}
+#camShiftD {
+	left:35px;
+	top:35px;
+}
+#camShiftR {
+	left:70px;
+	top:35px;
+}
+#camForward {
+	left:105px;
+	top:35px;
+}
+#camBackward {
+	left:140px;
+	top:35px;
+}
+#camReset {
+    width:70px;
+    font-size:12px;
+	left:175px;
+	top:35px;
+}
+#camFront {
+    width:65px;
+    font-size:12px;
+    left:260px;
+    top:35px;
+}
+#camBack {
+    width:65px;
+    font-size:12px;
+    left:330px;
+    top:35px;
+}
+#camLeft {
+    width:65px;
+    font-size:12px;
+    left:400px;
+    top:35px;
+}
+#camRight {
+    width:65px;
+    font-size:12px;
+    left:470px;
+    top:35px;
+}
+
+</style>
+
+
+
+<!-- JavaScript -->
+<script src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script src="files/js/Vectors.js"></script>
+<script src="files/js/Matrices.js"></script>
+<script src="files/js/Quaternion.js"></script>
+<script src="files/js/Light.js"></script>
+<script src="files/js/Material.js"></script>
+<script src="files/js/Timer.js"></script>
+<script src="files/js/FrameRate.js"></script>
+<script src="files/js/MouseState.js"></script>
+<script src="files/js/AnimationMode.js"></script>
+<script src="files/js/webglUtils.js"></script>
+<script src="files/js/ObjModel.js"></script>
+<script src="files/js/LineSegment.js"></script>
+<script src="files/js/OrbitCamera.js"></script>
+
+
+<script type="text/javascript">
+// <![CDATA[
+
+let gl = null;
+
+const CAMERA_DIST = 15;
+const Z_NEAR = 1;
+const Z_FAR = 500;
+const FOV_V = 45;
+const IMAGE_PATH = "files/images/";
+const MODEL_PATH = "files/models/";
+const GLSL_PATH  = "files/glsl/";
+const ANIM_DURATION = 500; // ms
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// main entry point
+///////////////////////////////////////////////////////////////////////////////
+document.addEventListener("DOMContentLoaded", function()
+{
+    let success = initWebGL("webglView");
+    if(!success)
+        return;
+
+    // init html elements
+    initHtmlElements();
+});
+
+
+
+// WebGL ======================================================================
+function initWebGL(canvasId)
+{
+    try{
+
+    var canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        var parentNode = canvas.parentNode;
+        var message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        parentNode.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                               message +
+                               "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // get context
+    gl = getContextGL(canvas);
+    if(!gl)
+    {
+        //log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // resize canvas window to fit in the parent
+    canvas.width = canvas.parentNode.clientWidth;
+    canvas.height = canvas.parentNode.clientHeight;
+    gl.canvas = canvas;
+
+    initGL(gl);
+    initGLSL(gl);
+    log("WebGL is initialized.");
+
+    // init app ===============================================================
+
+    // init touch states
+    gl.touches = [];
+
+    // line
+    gl.line = new LineSegment(gl);
+
+    // OBJ model
+    gl.model = new ObjModel(gl);
+    gl.model.read(MODEL_PATH+"debugger_50k.obj").then(obj =>
+    {
+        log("\nLoaded an OBJ model: debugger_50k.obj");
+        log(obj);
+
+        // create VBOs
+        gl.model.vboVertex = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.model.vboVertex);
+        gl.bufferData(gl.ARRAY_BUFFER, obj.vertices.byteLength + obj.normals.byteLength, gl.STATIC_DRAW);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, obj.vertices);
+        gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength, obj.normals);
+        gl.model.vboVertex.normalOffset = obj.vertices.byteLength;
+
+        gl.model.vboIndex = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.model.vboIndex);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, obj.indices, gl.STATIC_DRAW);
+        gl.model.vboIndex.indexCount = obj.indices.length;
+
+        // reposition camera
+        resetCamera()
+
+        // ready to start rendering loop
+        startRendering(gl);
+
+        //obj.textureUsed = false;
+        //obj.normalMapUsed = false;
+    }).catch(msg => log(msg));
+
+    // add mouse state holder
+    gl.mouse = new MouseState();
+
+    // register event handlers
+    registerEventHandlers(canvas);
+
+    return true;
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+        return false;
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// start rendering loop
+///////////////////////////////////////////////////////////////////////////////
+function startRendering(gl)
+{
+    log("\nStarting rendering loop...\n");
+
+    // try to find "requestAnimationFrame" function
+    // if it is not available use setTimeout() instead
+    var requestAnimationFrame = getRequestAnimationFrameFunction(window);
+    var timer = new Timer();
+    gl.fps = new FrameRate("fps");
+    var frameCallback = function()
+    {
+        gl.fps.tick();
+        gl.frameTime = timer.getFrameTime();
+        gl.runTime += gl.frameTime;
+        frame();
+        postFrame();
+        requestAnimationFrame(frameCallback);
+    };
+
+    timer.start();
+    gl.runTime = 0;
+    requestAnimationFrame(frameCallback);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    drawModel();
+    drawCrosshair();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// post frame
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a model
+///////////////////////////////////////////////////////////////////////////////
+function drawModel()
+{
+    // set active program
+    gl.program = gl.shaderPrograms["phong"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    // set view transform
+    gl.matrixView = gl.camera.matrix;
+    //gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+
+    // set modelview matrix
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+
+    // compute normal transform
+    gl.matrixNormal = gl.matrixModelView.clone();
+    gl.matrixNormal.setTranslation(0,0,0); // remove tranlsation part
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+
+    // compute projection matrix
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    // set material
+    //gl.uniform4fv(gl.program.uniform.materialAmbient, gl.material.getAmbient());
+    //gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material.getDiffuse());
+    //gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material.getSpecular());
+    //gl.uniform1f(gl.program.uniform.materialShininess, gl.material.shininess);
+
+    // disable texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    // draw OBJ
+    if(gl.model.vboVertex && gl.model.vboIndex)
+    {
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.model.vboVertex);
+        gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, gl.model.vboVertex.normalOffset);
+        //gl.vertexAttribPointer(gl.program.attribute.vertexColor, 4, gl.FLOAT, false, 0, gl.model.vboVertex.colorOffset);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.model.vboIndex);
+        gl.drawElements(gl.TRIANGLES, gl.model.vboIndex.indexCount, gl.UNSIGNED_SHORT, 0);
+        //log(gl.model.vboIndex.indexCount);
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function drawCrosshair()
+{
+    // set active program
+    gl.program = gl.shaderPrograms["flat"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    // crosshair is at the camera target
+    var matrixView = new Matrix4();
+    matrixView.setTranslation(0, 0, -gl.camera.distance);
+
+    // set uniforms
+    gl.uniform1i(gl.program.uniform.matrixComputed, false, false);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, gl.matrixModel.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+
+    // draw crosshair
+    var r = gl.model.radius;
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([1.0, 0.5, 0, 1]));
+    gl.line.draw(-r, 0, 0, r, 0, 0);
+    gl.line.draw(0, -r, 0, 0, r, 0);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// register event handlers to canvas
+///////////////////////////////////////////////////////////////////////////////
+function registerEventHandlers(canvas)
+{
+    // register event handlers
+    window.addEventListener("resize",  handleResize, false);
+    log("Added window resize event listener, handleResize().");
+
+    window.addEventListener("keydown", handleKeyDown, false);
+    log("Added window keydown event listener, handleKeyDown().");
+
+    window.addEventListener("keyup", handleKeyUp, false);
+    log("Added window keyup event listener, handleKeyUp().");
+
+    canvas.addEventListener("mousemove", handleMouseMove, false);
+    log("Added canvas mousemove event listener, handleMouseMove().");
+
+    canvas.addEventListener("mousedown", handleMouseDown, false);
+    log("Added canvas mousedown event listener, handleMouseDown().");
+
+    canvas.addEventListener("mouseup", handleMouseUp, false);
+    log("Added canvas mouseup event listener, handleMouseUp().");
+
+    canvas.addEventListener("click", handleClick, false);
+    log("Added canvas click event listener, handleClick().");
+
+    canvas.addEventListener("mouseover", handleMouseOver, false);
+    log("Added canvas mouseover event listener, handleMouseOver().");
+
+    canvas.addEventListener("mouseout", handleMouseOut, false);
+    log("Added canvas mouseout event listener, handleMouseOut().");
+
+    canvas.addEventListener("contextmenu", handleContextMenu, false);
+    log("Added canvas contextmenu event listener, handleContextMenu().");
+
+    canvas.addEventListener("wheel", handleWheel, false);
+    log("Added canvas wheel event listeners, handleWheel()");
+
+    // canvas touch events
+    canvas.addEventListener("touchstart", handleTouchStart, false);
+    log("Added canvas touchstart event listeners, handleTouchStart()");
+
+    canvas.addEventListener("touchend", handleTouchEnd, false);
+    log("Added canvas touchend event listeners, handleTouchEnd()");
+
+    canvas.addEventListener("touchmove", handleTouchMove, false);
+    log("Added canvas touchmove event listeners, handleTouchMove()");
+
+    canvas.addEventListener("touchcancel", handleTouchCancel, false);
+    log("Added canvas touchcancel event listeners, handleTouchCancel()");
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the window is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize()
+{
+    // get the client dimension of whole window
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+    //log("parent OFFSET resized: " + gl.canvas.parentNode.offsetWidth + " x " + gl.canvas.parentNode.offsetHeight);
+
+    // reset viewport and projection matrix
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(FOV_V, gl.canvas.width/gl.canvas.height, gl.nearPlane, gl.farPlane);
+
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handlers for mouse event
+///////////////////////////////////////////////////////////////////////////////
+function handleMouseMove(e)
+{
+    const SCALE_ANGLE = 0.2;
+    const DEG2RAD = Math.PI / 180;
+
+    // get current mouse position
+    var offset = getElementOffset(this);
+    var mouseX = e.clientX - offset.x;
+    var mouseY = e.clientY - offset.y;
+    var deltaX = mouseX - gl.mouse.x;
+    var deltaY = mouseY - gl.mouse.y;
+    gl.mouse.x = mouseX;
+    gl.mouse.y = mouseY;
+    //log("mouse:" + mouseX + ", " + mouseY + "   " + "delta:" + deltaX + ", " + deltaY);
+
+    // rotate camera
+    if(gl.mouse.leftDown)
+    {
+        var delta = new Vector2();
+        delta.x = (gl.mouse.y - gl.mouse.downY) * SCALE_ANGLE;
+        delta.y = (gl.mouse.x - gl.mouse.downX) * SCALE_ANGLE;
+
+        var quat = Quaternion.toQuaternionFromAngles(delta.x * DEG2RAD * 0.5, delta.y * DEG2RAD * 0.5);
+        quat.multiply(gl.camera.downQuaternion);
+        gl.camera.rotateTo(quat, ANIM_DURATION, AnimationMode.EASE_OUT, showCameraInfo);
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+
+        /*
+        var angle = new Vector3();
+        angle.x = gl.camera.downAngle.x + delta.x;
+        angle.y = gl.camera.downAngle.y - delta.y; // must negate pitch
+        gl.camera.rotateTo(angle, ANIM_DURATION, AnimationMode.EASE_OUT);
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+        */
+    }
+
+    // pan camera
+    if(gl.mouse.rightDown)
+    {
+        var scale = gl.model.radius * 0.01;
+        var delta = new Vector2(deltaX * scale, deltaY * scale);
+        //gl.camera.shift(delta);
+        gl.camera.shift(delta, ANIM_DURATION, AnimationMode.EASE_OUT, showCameraInfo);
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }
+    //log(gl.mouse.toString());
+}
+
+function handleWheel(e)
+{
+    //log("wheel: " + e.deltaX + ", " + e.deltaY + ", " + e.deltaZ + ", " + e.deltaMode);
+    const ZOOM_SCALE = 0.001;
+    //log("wheel: " + e.deltaY);
+
+    // positive deltaY = wheel down
+    // negative deltaY = wheel up
+    if(e.deltaY != 0)
+    {
+        var deltaDistance = -e.deltaY * gl.model.radius * 0.2;
+        if((gl.camera.distance - deltaDistance) < gl.nearPlane)
+            deltaDistance = gl.camera.distance - gl.nearPlane;
+        else if((gl.camera.distance - deltaDistance) > gl.farPlane)
+            deltaDistance = gl.camera.distance - gl.farPlane;
+
+        gl.camera.moveForward(deltaDistance, ANIM_DURATION, AnimationMode.EASE_OUT);
+        //gl.camera.moveForward(delta);
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }
+
+    e.preventDefault();
+}
+
+function handleMouseDown(e)
+{
+    // remember mouse position when mouse down
+    var offset = getElementOffset(this);
+    gl.mouse.downX = e.clientX - offset.x;
+    gl.mouse.downY = e.clientY - offset.y;
+    gl.mouse.x = gl.mouse.downX;
+    gl.mouse.y = gl.mouse.downY;
+    //log("down: " + gl.mouse.downX + ", " + gl.mouse.downY);
+
+    // remember previous angle and quaternion when mouse down
+    gl.camera.downAngle = gl.camera.angle.clone();
+    gl.camera.downQuaternion = gl.camera.quaternion.clone();
+
+    //e = e || window.event; // hack for IE
+    if("which" in e)
+    {
+        switch(e.which)
+        {
+            case 1: gl.mouse.leftDown = true;   break;
+            case 2: gl.mouse.middleDown = true; break;
+            case 3: gl.mouse.rightDown = true;  break;
+        }
+    }
+    else if("button" in e) // for IE
+    {
+        if(e.button & 1) gl.mouse.leftDown = true;
+        if(e.button & 2) gl.mouse.rightDown = true;
+        if(e.button & 4) gl.mouse.middleDown = true;
+    }
+
+    e.preventDefault(); // disable context menu
+}
+
+function handleMouseUp(e)
+{
+    //e = e || window.event; // hack for IE
+    if("which" in e)
+    {
+        switch(e.which)
+        {
+            case 1: gl.mouse.leftDown = false;      break;
+            case 2: gl.mouse.middleDown = false;    break;
+            case 3: gl.mouse.rightDown = false;     break;
+        }
+    }
+    else if("button" in e) // for IE
+    {
+        if(e.button & 1) gl.mouse.leftDown = false;
+        if(e.button & 2) gl.mouse.rightDown = false;
+        if(e.button & 4) gl.mouse.middleDown = false;
+    }
+}
+
+function handleClick(e)
+{
+}
+
+function handleMouseOver(e)
+{
+}
+
+function handleMouseOut(e)
+{
+    gl.mouse.leftDown = false;
+    gl.mouse.rightDown = false;
+}
+
+function handleContextMenu(e)
+{
+    e.preventDefault(); // disable context menu
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handle keyboard events
+///////////////////////////////////////////////////////////////////////////////
+function handleKeyDown(e)
+{
+    //log("key down: " + e.keyCode);
+
+    var speed = gl.model.radius * 0.5;
+    var accel = speed * 4;
+    var shiftVector = new Vector2(0, 0);
+
+    e = e || window.event;
+    switch(e.keyCode)
+    {
+    case 37:    // left
+        shiftVector.x = 1;
+        break;
+
+    case 38:    // up
+        shiftVector.y = 1;
+        break;
+
+    case 39:    // right
+        shiftVector.x = -1;
+        break;
+
+    case 40:    // down
+        shiftVector.y = -1;
+        break;
+
+    case 61:    // +(=)
+        gl.camera.startForward(speed, accel);
+        break;
+
+    case 173:    // -(_)
+        gl.camera.startForward(-speed, accel);
+        break;
+    }
+
+    // shift
+    if(shiftVector.x != 0 || shiftVector.y != 0)
+    {
+        shiftVector.normalize();
+        shiftVector.scale(speed);
+        gl.camera.startShift(shiftVector, accel);
+    }
+}
+
+function handleKeyUp(e)
+{
+    //log("key up: " + e.keyCode);
+
+    e = e || window.event;
+    switch(e.keyCode)
+    {
+    case 37:    // left
+    case 38:    // up
+    case 39:    // right
+    case 40:    // down
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+        break;
+
+    case 61:    // +(=)
+    case 173:    // -(_)
+        gl.camera.stopForward();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+        break;
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handle touch events
+///////////////////////////////////////////////////////////////////////////////
+function handleTouchStart(e)
+{
+    log("touch start: " + e.changedTouches.length + ", " + gl.touches.length);
+    e.preventDefault(); // prevent touch event being delivered
+
+    // remember angles when touch started
+    gl.camera.touchAngle = gl.camera.angle.clone();
+
+    // remember all touch data when touch started
+    let touches = e.changedTouches;
+    for(let i = 0; i < touches.length; ++i)
+    {
+        gl.touches.push(copyTouch(touches[i]));
+        gl.touches.distance = 0;
+    }
+
+    if(gl.touches.length == 1)
+        gl.touches.downTouch = copyTouch(gl.touches[0]);
+}
+
+function handleTouchEnd(e)
+{
+    log("touch end: " + e.changedTouches.length + ", " + gl.touches.length);
+    e.preventDefault();
+
+    // remove ended touch object from array
+    let touches = e.changedTouches;
+    for(let i = 0; i < touches.length; ++i)
+    {
+        let index = findTouchIndex(touches[i]);
+        if(index >= 0) // found
+            gl.touches.splice(index, 1);    // remove it
+    }
+
+    // if there is still touch object, update the first touch object for rotation
+    if(gl.touches.length > 0)
+        gl.touches.downTouch = copyTouch(gl.touches[0]);
+}
+
+function handleTouchMove(e)
+{
+    e.preventDefault();
+
+    // get 2 touch objects for camera pannng and zoom effects
+    let touch1, touch2; // current touches
+    let touches = e.changedTouches;
+    for(let i = 0; i < touches.length; ++i)
+    {
+        //log("Touch Moved:" + findTouchIndex(touches[i]));
+        let index = findTouchIndex(touches[i]);
+        if(index == 0)
+            touch1 = touches[i];
+        else if(index == 1)
+            touch2 = touches[i];
+    }
+
+    // if 2 touches, perform pan/zoom
+    if(gl.touches.length == 2)
+    {
+        // pan camera
+        let v1 = new Vector2(touch1.pageX - gl.touches[0].pageX, touch1.pageY - gl.touches[0].pageY);
+        let v2 = new Vector2(touch2.pageX - gl.touches[1].pageX, touch2.pageY - gl.touches[1].pageY);
+        let dir = v1.add(v2).scale(0.5);
+        gl.touches[0].pageX = touch1.pageX;
+        gl.touches[0].pageY = touch1.pageY;
+        gl.touches[1].pageX = touch2.pageX;
+        gl.touches[1].pageY = touch2.pageY;
+
+        // shift (pan) camera
+        const SCALE = 1.0;
+        let delta = new Vector2(dir.x * SCALE, dir.y * SCALE);
+        gl.camera.shift(delta, ANIM_DURATION, AnimationMode.EASE_OUT, showCameraInfo);
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+
+        // zoom camera
+        let v = new Vector2(touch2.pageX - touch1.pageX, touch2.pageY - touch1.pageY);
+        let dist = v.length();
+        delta = 0;
+        if(gl.touches.distance > 0)
+            delta = 0.001 * gl.camera.zoomScale * (dist - gl.touches.distance);
+        gl.touches.distance = dist;     // remember
+
+        let near = gl.nearPlane * NEAR_FACTOR;
+        let deltaDistance = delta * gl.camera.zoomScale;
+        if((gl.camera.distance - deltaDistance) < near)
+            deltaDistance = gl.camera.distance - near;
+        else if((gl.camera.distance - deltaDistance) > (gl.farPlane - 1000))
+            deltaDistance = gl.camera.distance - (gl.farPlane - 1000);
+
+        //gl.camera.moveForward(deltaDistance);
+        gl.camera.moveForward(deltaDistance, ANIM_DURATION, AnimationMode.EASE_OUT, showCameraInfo);
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+
+        // reset selection
+        gl.selectBuffer.invalid = true;
+        unfocus();
+    }
+    // if 1 touch, perform rotate
+    else if(gl.touches.length == 1)
+    {
+        const SCALE_ROTATE = 0.5;
+        let angle = new Vector3();
+        angle.x = gl.camera.touchAngle.x + (touch1.pageY - gl.touches.downTouch.pageY) * SCALE_ROTATE;
+        angle.y = gl.camera.touchAngle.y - (touch1.pageX - gl.touches.downTouch.pageX) * SCALE_ROTATE;
+        gl.camera.rotateTo(angle, ANIM_DURATION, AnimationMode.EASE_OUT, showCameraInfo);
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+
+        // update position
+        //gl.touches[0].pageX = touch1.pageX;
+        //gl.touches[0].pageY = touch1.pageY;
+    }
+}
+
+function handleTouchCancel(e)
+{
+    gl.touches.length = 0;  // clear
+    //log("Touch canceled.");
+}
+
+function copyTouch(touch)
+{
+    // return touch data
+    return {identifier:touch.identifier, pageX:touch.pageX, pageY:touch.pageY};
+}
+
+function findTouchIndex(touch)
+{
+    // find touch object with same id
+    for(var i = 0; i < gl.touches.length; ++i)
+    {
+        if(touch.identifier == gl.touches[i].identifier)
+            return i;
+    }
+    return -1;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL(gl)
+{
+    gl.clearColor(1.0, 1.0, 1.0, 0.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);   // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+    gl.cullFace(gl.BACK);
+    gl.enable(gl.BLEND);        // enable blend
+
+    // default light
+    gl.light = new Light(0, 0, 1, 0);
+    //gl.light.position.normalize(); //@@ fix normalize()
+    gl.light.color.set(1.0, 1.0, 1.0, 1.0);        // light color
+    gl.light.attenuations.set(1, 0.0, 0); // attenuations (constant, linear, quad)
+    log("    Light Position: " + gl.light.position);
+    log("       Light Color: " + gl.light.color);
+    log("Light Attenuations: " + gl.light.attenuations);
+    log();
+
+    // default material
+    gl.material = new Material(0.7, 0.7, 0.7, 1.0);    // with default diffuse
+    gl.material.ambient.set(0.2, 0.2, 0.2, 1);
+    gl.material.specular.set(1, 1, 1, 1);
+    gl.material.shininess = 128;
+    log("  Material Ambient: " + gl.material.ambient);
+    log("  Material Diffuse: " + gl.material.diffuse);
+    log(" Material Specualr: " + gl.material.specular);
+    log("Material Shininess: " + gl.material.shininess);
+    log();
+
+    // init camera with position and target
+    gl.camera = new OrbitCamera(0, 0, CAMERA_DIST, 0, 0, 0);
+    gl.camera.angleUsed = true;     // use angle for rotation
+    log("Created an orbit camera.");
+    log(gl.camera);
+
+    // set near and far clip planes
+    gl.nearPlane = Z_NEAR;
+    gl.farPlane = Z_FAR;
+
+    // init matrices
+    handleResize();
+    gl.matrixModel = new Matrix4();
+    gl.matrixView = gl.camera.matrix;
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL(gl)
+{
+    // enable all vertexAttribArray
+    initVertexAttribArrays(gl);
+
+    // load shaders
+    gl.shaderPrograms = {}; // associative array
+
+    // load phong shader
+    createShaderProgram(gl, GLSL_PATH+"gles_phong.vert", GLSL_PATH+"gles_phong.frag").then(function(program)
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
+        gl.uniform4fv(program.uniform.lightColor, gl.light.getColor());
+        gl.uniform3fv(program.uniform.lightAttenuations, gl.light.getAttenuations());
+        gl.uniform4fv(program.uniform.materialAmbient, gl.material.getAmbient());
+        gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
+        gl.uniform4fv(program.uniform.materialSpecular, gl.material.getSpecular());
+        gl.uniform1f(program.uniform.materialShininess, gl.material.shininess);
+
+        gl.shaderPrograms["phong"] = program;
+    });
+
+    // load gooch shader
+    createShaderProgram(gl, GLSL_PATH+"gles_gooch.vert", GLSL_PATH+"gles_gooch.frag").then(function(program)
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
+        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
+        gl.uniform4fv(program.uniform.lightColor, gl.light.getColor());
+        //gl.uniform4fv(program.uniform.materialAmbient, gl.material.getAmbient());
+        gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
+        //gl.uniform4fv(program.uniform.materialSpecular, gl.material.getSpecular());
+        //gl.uniform1f(program.uniform.materialShininess, gl.material.shininess);
+        gl.uniform4fv(program.uniform.warmColor, new Float32Array([1.0, 1.0, 0.0, 1]));
+        gl.uniform4fv(program.uniform.coolColor, new Float32Array([0.0, 0.0, 1.0, 1]));
+        gl.uniform1f(program.uniform.warmWeight, 0.5);
+        gl.uniform1f(program.uniform.coolWeight, 0.5);
+
+        gl.shaderPrograms["gooch"] = program;
+    });
+
+    // load flat shader
+    createShaderProgram(gl, GLSL_PATH+"gles_flat.vert", GLSL_PATH+"gles_flat.frag").then(function(program)
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.materialDiffuse, new Float32Array([1,1,1,1]));
+        gl.uniform1i(program.uniform.matrixComputed, false);
+
+        gl.shaderPrograms["flat"] = program;
+    });
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init DOM elements, all elements are stored in gl.dom
+///////////////////////////////////////////////////////////////////////////////
+function initHtmlElements()
+{
+    // html elements
+    gl.dom = {};
+
+    // camera info
+    gl.dom.camPosition = document.getElementById("camPosition");
+    gl.dom.camTarget = document.getElementById("camTarget");
+    gl.dom.camDistance = document.getElementById("camDistance");
+    gl.dom.camAngle = document.getElementById("camAngle");
+    gl.dom.camQuaternion = document.getElementById("camQuaternion");
+
+    // camera controls
+    // events for camera navigation controlls
+    gl.dom.camShiftL = document.getElementById("camShiftL");
+    gl.dom.camShiftL.addEventListener("mousedown", function()
+    {
+        gl.camera.startShift(new Vector2(gl.model.radius*0.5, 0), gl.model.radius*2);
+    }, false);
+    gl.dom.camShiftL.addEventListener("mouseup", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+    gl.dom.camShiftL.addEventListener("mouseout", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+
+    gl.dom.camShiftR = document.getElementById("camShiftR");
+    gl.dom.camShiftR.addEventListener("mousedown", function()
+    {
+        gl.camera.startShift(new Vector2(-gl.model.radius*0.5, 0), gl.model.radius*2);
+    }, false);
+    gl.dom.camShiftR.addEventListener("mouseup", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+    gl.dom.camShiftR.addEventListener("mouseout", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+
+    gl.dom.camShiftU = document.getElementById("camShiftU");
+    gl.dom.camShiftU.addEventListener("mousedown", function()
+    {
+        gl.camera.startShift(new Vector2(0, gl.model.radius*0.5), gl.model.radius*2);
+    }, false);
+    gl.dom.camShiftU.addEventListener("mouseup", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+    gl.dom.camShiftU.addEventListener("mouseout", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+
+    gl.dom.camShiftD = document.getElementById("camShiftD");
+    gl.dom.camShiftD.addEventListener("mousedown", function()
+    {
+        gl.camera.startShift(new Vector2(0, -gl.model.radius*0.5), gl.model.radius*2);
+    }, false);
+    gl.dom.camShiftD.addEventListener("mouseup", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+    gl.dom.camShiftD.addEventListener("mouseout", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+
+    gl.dom.camForward = document.getElementById("camForward");
+    gl.dom.camForward.addEventListener("mousedown", function()
+    {
+        gl.camera.startForward(gl.model.radius*0.5, gl.model.radius*2);
+    }, false);
+    gl.dom.camForward.addEventListener("mouseup", function()
+    {
+        gl.camera.stopForward();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+    gl.dom.camForward.addEventListener("mouseout", function()
+    {
+        gl.camera.stopForward();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+
+    gl.dom.camBackward = document.getElementById("camBackward");
+    gl.dom.camBackward.addEventListener("mousedown", function()
+    {
+        gl.camera.startForward(-gl.model.radius*0.5, gl.model.radius*2);
+    }, false);
+    gl.dom.camBackward.addEventListener("mouseup", function()
+    {
+        gl.camera.stopForward();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+    gl.dom.camBackward.addEventListener("mouseout", function()
+    {
+        gl.camera.stopForward();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+
+    gl.dom.camReset = document.getElementById("camReset");
+    gl.dom.camReset.addEventListener("click", resetCamera, false);
+
+    gl.dom.camFront = document.getElementById("camFront");
+    gl.dom.camFront.addEventListener("click", function()
+    {
+        var q = Quaternion.toQuaternionFromAngles(0, 0);
+        gl.camera.rotateTo(q, 500, AnimationMode.EASE_IN_OUT);
+    });
+
+    gl.dom.camFront = document.getElementById("camBack");
+    gl.dom.camFront.addEventListener("click", function()
+    {
+        var q = Quaternion.toQuaternionFromAngles(0, Math.PI/180*90);
+        gl.camera.rotateTo(q, 500, AnimationMode.EASE_IN_OUT);
+    });
+
+    gl.dom.camFront = document.getElementById("camLeft");
+    gl.dom.camFront.addEventListener("click", function()
+    {
+        var q = Quaternion.toQuaternionFromAngles(0, -Math.PI/180*45);
+        gl.camera.rotateTo(q, 500, AnimationMode.EASE_IN_OUT);
+    });
+
+    gl.dom.camFront = document.getElementById("camRight");
+    gl.dom.camFront.addEventListener("click", function()
+    {
+        var q = Quaternion.toQuaternionFromAngles(0, Math.PI/180*45);
+        gl.camera.rotateTo(q, 500, AnimationMode.EASE_IN_OUT);
+    });
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reset camera
+///////////////////////////////////////////////////////////////////////////////
+function resetCamera()
+{
+    var q = new Quaternion(1,0,0,0);
+    gl.camera.rotateTo(q, 1000, AnimationMode.EASE_OUT);
+
+    var d = gl.camera.distance - gl.model.radius*3;
+    gl.camera.moveForward(d, 1000, AnimationMode.EASE_OUT);
+
+    var t = gl.model.center;
+    gl.camera.shiftTo(t, 1000, AnimationMode.EASE_OUT);
+
+    setTimeout(showCameraInfo, 1000, gl.camera);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// show camera information
+///////////////////////////////////////////////////////////////////////////////
+function showCameraInfo(cam)
+{
+    var v = cam.position;
+    gl.dom.camPosition.textContent = "Position: (" + v.x.toFixed(3) + ", " + v.y.toFixed(3) + ", " + v.z.toFixed(3) + ")";
+    v = cam.target;
+    gl.dom.camTarget.textContent = "Target: (" + v.x.toFixed(3) + ", " + v.y.toFixed(3) + ", " + v.z.toFixed(3) + ")";
+    v = cam.distance;
+    gl.dom.camDistance.textContent = "Distance: " + v.toFixed(3);
+    v = cam.angle;
+    gl.dom.camAngle.textContent = "Angle: (" + v.x.toFixed(3) + ", " + v.y.toFixed(3) + ", " + v.z.toFixed(3) + ")";
+    v = cam.quaternion;
+    gl.dom.camQuaternion.textContent = "Quaternion: (" + v.s.toFixed(3) + ", " + v.x.toFixed(3) + ", " + v.y.toFixed(3) + ", " + v.z.toFixed(3) + ")";
+}
+
+
+
+// ]]>
+</script>
+
+</head>
+
+<body>
+
+<!-- content block ============================================================ -->
+<div class="contentblock">
+
+<!-- WebGL container ========================================================== -->
+<div class="webglblock">
+<canvas id="webglView">
+</canvas>
+
+<div id="fps">
+FPS: 0
+</div>
+
+<!-- camera buttons -->
+<div class="camWrap noselect">
+<div id="camShiftL" class="camControl">&#9668;</div>
+<div id="camShiftD" class="camControl">&#9660;</div>
+<div id="camShiftR" class="camControl">&#9658;</div>
+<div id="camShiftU" class="camControl">&#9650;</div>
+<div id="camForward" class="camControl">+</div>
+<div id="camBackward" class="camControl">&#8722;</div>
+<div id="camReset" class="camControl">Reset</div>
+
+<div id="camFront" class="camControl">Front</div>
+<div id="camBack" class="camControl">Back</div>
+<div id="camLeft" class="camControl">Left</div>
+<div id="camRight" class="camControl">Right</div>
+</div> <!-- end of camWrap -->
+
+<div class="camInfo">
+<h4>
+Orbit Camera
+</h4>
+<div id="camPosition">
+Position:
+</div>
+<div id="camTarget">
+Target:
+</div>
+<div id="camDistance">
+Distance:
+</div>
+<div id="camAngle">
+Angle:
+</div>
+<div id="camQuaternion">
+Quaternion:
+</div>
+</div>
+
+</div>
+<!-- end of WebGL container -->
+
+
+
+
+</div> <!-- end of contentblock -->
+
+</body>
+</html>

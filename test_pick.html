@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- ==========================================================================
+The first WebGL testing page for VetTech project
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2011-11-24
+UPDATED: 2020-02-24
+===============================================================================
+-->
+
+<head>
+<title>Testing Mouse Picking</title>
+<meta name="generator" content="editplus" />
+<meta name="author" content="Song Ho Ahn" />
+<meta name="keywords" content="" />
+<meta name="description" content="" />
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:segoe ui, helvetica neue, sans-serif;
+}
+.contentblock {
+    display:flex;
+    position:absolute;
+    left:0;
+    right:0;
+    top:0;
+    bottom:0;
+}
+.flexcol {
+    flex:1;
+    margin:10px;
+}
+#webglview {
+    width:100%;
+    height:100%;
+    border:1px solid #ccc;
+    box-sizing:border-box;
+}
+
+</style>
+
+
+<!-- JavaScript -->
+<script type="text/javascript"src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script type="text/javascript" src="files/js/Vectors.js"></script>
+<script type="text/javascript" src="files/js/Matrices.js"></script>
+<script type="text/javascript" src="files/js/Quaternion.js"></script>
+<script type="text/javascript" src="files/js/Light.js"></script>
+<script type="text/javascript" src="files/js/Material.js"></script>
+<script type="text/javascript" src="files/js/Timer.js"></script>
+<script type="text/javascript" src="files/js/FrameRate.js"></script>
+<script type="text/javascript" src="files/js/MouseState.js"></script>
+<script type="text/javascript" src="files/js/OrbitCamera.js"></script>
+<script type="text/javascript" src="files/js/SelectBuffer.js"></script>
+<script type="text/javascript" src="files/js/webglUtils.js"></script>
+
+<script type="text/javascript">
+// <![CDATA[
+
+var gl = null;
+var vboVertex;  // vertex attributes
+var vboIndex;   // index attribute
+var CAMERA_Z = 30;
+
+window.onload = function()
+{
+    startWebGL("webglview");
+
+};
+
+
+
+var Entity = function()
+{
+    this.matrix = new Matrix4();
+
+};
+
+
+var Node = function(name)
+{
+    this.name = name;   // unique ID
+    this.matrix = new Matrix4();
+    this.parentNode = null;
+    this.childNodes = new Array();
+    this.entities = new Array();
+};
+Node.prototype =
+{
+    setName: function(name)
+    {
+        this. name = name;
+    },
+    addChildNode: function(node)
+    {
+        node.parentNode = this.node;
+        this.childNodes[node.name] = node;
+    },
+    removeChildNode: function(nodeName)
+    {
+        delete this.childNodes[nodeName];
+    },
+    addEntity: function(entity)
+    {
+        this.entities.push(entity);
+    },
+    removeEntity: function(entityName)
+    {
+        for(var index in this.entities)
+        {
+            if(this.entities.name == entityName)
+                this.entities.splice(index, 1);
+        }
+    },
+    toString: function()
+    {
+    }
+};
+
+
+
+
+// WebGL ======================================================================
+function startWebGL(canvasId)
+{
+    try{
+
+    //Logger.show();
+
+    var canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        var node = canvas.parentNode;
+        var message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        node.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                         message +
+                         "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return;
+    }
+
+    gl = getContextGL(canvas);
+    if(gl)
+    {
+        log("===== WebGL Info =====");
+        log(" Version: " + gl.getParameter(gl.VERSION));
+        log("GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+        log("  Vendor: " + gl.getParameter(gl.VENDOR));
+        log("Renderer: " + gl.getParameter(gl.RENDERER));
+        log("   Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+        log("   Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+        log(" Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+        log();
+    }
+
+    // resize window to fit to parent
+    canvas.width = canvas.parentNode.clientWidth;
+    canvas.height = canvas.parentNode.clientHeight;
+    gl.canvas = canvas;
+
+    initGL(gl.canvas.width, gl.canvas.height);
+    initGLSL();
+    log("WebGL is initialized.");
+
+    // add select buffer
+    gl.selectBuffer = new SelectBuffer(gl);
+    gl.pickIndex = 0;
+
+    // init camera
+    gl.camera = new OrbitCamera(0, 0, CAMERA_Z, 0, 0, 0);
+    log(gl.camera.toString());
+
+    // create a scene node
+    gl.scene = new Node("scene");
+
+    // add mouse state holder
+    gl.mouse = new MouseState();
+
+    // register event handlers
+    window.addEventListener("resize",  handleResize, false);
+    log("Added window resize event listener, handleResize().");
+    canvas.addEventListener("mousemove", handleMouseMove, false);
+    log("Added canvas mousemove event listener, handleMouseMove().");
+    canvas.addEventListener("mousedown", handleMouseDown, false);
+    log("Added canvas mousedown event listener, handleMouseDown().");
+    canvas.addEventListener("mouseup", handleMouseUp, false);
+    log("Added canvas mouseup event listener, handleMouseUp().");
+    canvas.addEventListener("click", handleClick, false);
+    log("Added canvas click event listener, handleClick().");
+    canvas.addEventListener("mouseout", handleMouseOut, false);
+    log("Added canvas mouseout event listener, handleMouseOut().");
+    canvas.addEventListener("contextmenu", handleContextMenu, false);
+    log("Added canvas contextmenu event listener, handleContextMenu().");
+    canvas.addEventListener("mousewheel", handleMouseWheel, false);
+    canvas.addEventListener("DOMMouseScroll", handleMouseWheel, false);
+    log("Added canvas mousewheel event listeners, handleMouseWheel()");
+
+    // resize window once
+    handleResize();
+
+    // try to find "requestAnimationFrame" function
+    // if it is not available use setTimeout() instead
+    var requestAnimationFrame = getRequestAnimationFrameFunction(window);
+
+    // prepare rendering loop
+    log("\nStarting rendering loop...\n");
+
+    var timer = new Timer();
+    var fps = new FrameRate("framerate");
+    var frameCallback = function()
+    {
+        fps.tick();
+        gl.frameTime = timer.getFrameTime(); // get elapsed time as ms
+        gl.runTime += gl.frameTime;
+        frame();
+        postFrame();
+        requestAnimationFrame(frameCallback);
+    };
+
+    // start rendering loop
+    timer.start();
+    gl.runTime = 0;
+    requestAnimationFrame(frameCallback);
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+    }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // set active program
+    gl.program = gl.shaderPrograms["phong"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    // view transform
+    gl.matrixView = gl.camera.matrix;
+
+    draw();
+
+    // draw to select buffer
+    if(gl.selectBuffer.invalid && !gl.mouse.leftDown && !gl.mouse.rightDown)
+    {
+        drawForSelection();
+        gl.selectBuffer.invalid = false;
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// post frame
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw entities
+///////////////////////////////////////////////////////////////////////////////
+function draw()
+{
+    var k = 1;
+    for(var i = 0; i < 5; ++i)
+    {
+        for(var j = 0; j < 5; ++j, ++k)
+        {
+            // model transform
+            gl.matrixModel.identity();
+            gl.matrixModel.translate(-10+(j*5), 10-(i*5), 0);
+
+            // compute modelview transform
+            gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+            gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+
+            // compute normal transform
+            gl.matrixNormal = gl.matrixModelView.clone();
+            gl.matrixNormal.setTranslation(0,0,0); // remove tranlsation part
+            gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+
+            // compute modelviewprojection transform
+            gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+            gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+            if(gl.pickIndex != k)
+            {
+                gl.uniform4fv(gl.program.uniform.materialAmbient, gl.material.getAmbient());
+                gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material.getDiffuse());
+                gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material.getSpecular());
+            }
+            else
+            {
+                gl.uniform4fv(gl.program.uniform.materialAmbient, gl.materialSelect.getAmbient());
+                gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.materialSelect.getDiffuse());
+                gl.uniform4fv(gl.program.uniform.materialSpecular, gl.materialSelect.getSpecular());
+            }
+
+            drawCube();
+        }
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw entities for selection
+///////////////////////////////////////////////////////////////////////////////
+function drawForSelection()
+{
+    gl.selectBuffer.bind();
+    gl.clearColor(0,0,0,0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.program = gl.shaderPrograms["select"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    var k = 1;
+    for(var i = 0; i < 5; ++i)
+    {
+        for(var j = 0; j < 5; ++j, k += 1)
+        {
+            // model transform
+            gl.matrixModel.identity();
+            gl.matrixModel.translate(-10+(j*5), 10-(i*5), 0);
+
+            // compute modelviewprojection transform
+            gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixView).multiply(gl.matrixModel);
+            gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+            // set a uniform for picking color
+            gl.pickColor = gl.selectBuffer.getColor(k);
+            gl.uniform4fv(gl.program.uniform.pickColor, gl.pickColor);
+
+            drawCube();
+        }
+    }
+
+    gl.selectBuffer.unbind();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a cube
+///////////////////////////////////////////////////////////////////////////////
+function drawCube()
+{
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, vboVertex.normalOffset);
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vboIndex);
+    gl.drawElements(gl.TRIANGLES, vboIndex.indexCount, gl.UNSIGNED_BYTE, 0);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the canvas is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize()
+{
+    // get the client dimension of whole window
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, 1, 100);
+
+    // resize the selection buffer
+    gl.selectBuffer.init(gl.canvas.width, gl.canvas.height);
+    gl.selectBuffer.invalid = true;
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handlers for mouse event
+///////////////////////////////////////////////////////////////////////////////
+function handleMouseMove(e)
+{
+    const SCALE_ANGLE = 0.2;
+    var DEG2RAD = Math.PI / 180;
+
+    //e = e || window.event; // hack for IE
+    var mouseX = e.clientX - this.offsetLeft;
+    var mouseY = e.clientY - this.offsetTop;
+    var deltaX = mouseX - gl.mouse.x;
+    var deltaY = mouseY - gl.mouse.y;
+    gl.mouse.x = mouseX;
+    gl.mouse.y = mouseY;
+
+    // rotate model
+    if(gl.mouse.leftDown)
+    {
+        var delta = new Vector2();
+        delta.x = (gl.mouse.y - gl.mouse.downY) * SCALE_ANGLE;
+        delta.y = (gl.mouse.x - gl.mouse.downX) * SCALE_ANGLE;
+
+        var quat = Quaternion.toQuaternionFromAngles(delta.x * DEG2RAD * 0.5, delta.y * DEG2RAD * 0.5);
+        quat.multiply(gl.camera.downQuaternion);
+        gl.camera.rotateTo(quat);
+    }
+    if(gl.mouse.rightDown)
+    {
+        var delta = new Vector2(0, deltaY * 0.05);
+        gl.camera.shift(delta);
+    }
+    //log(gl.mouse.toString());
+
+    // update selection buffer
+    if(gl.mouse.leftDown || gl.mouse.rightDown)
+    {
+        gl.selectBuffer.invalid = true;
+        gl.pickIndex = 0;
+    }
+    else
+    {
+        gl.pickIndex = gl.selectBuffer.pick(gl.mouse.x, gl.canvas.height - gl.mouse.y);
+        //log(gl.pickIndex);
+    }
+
+    // debug
+    var mousepos = document.getElementById("mousepos");
+    if(mousepos) mousepos.innerHTML = "Mouse Position: " + gl.mouse.x + " x " + gl.mouse.y;
+    var indexvalue = document.getElementById("indexvalue");
+    if(indexvalue) indexvalue.innerHTML = "Pick Index: " + gl.pickIndex;
+}
+
+function handleMouseDown(e)
+{
+    gl.mouse.downX = gl.mouse.x;
+    gl.mouse.downY = gl.mouse.y;
+
+    // remember previous angle and quaternion when mouse down
+    gl.camera.downAngle = gl.camera.angle.clone();
+    gl.camera.downQuaternion = gl.camera.quaternion.clone();
+
+    //e = e || window.event; // hack for IE
+    if("which" in e)
+    {
+        switch(e.which)
+        {
+        case 1:
+            gl.mouse.leftDown = true;
+            break;
+        case 2:
+            gl.mouse.middleDown = true;
+            break;
+        case 3:
+            gl.mouse.rightDown = true;
+            break;
+        }
+    }
+    else if("button" in e) // for IE
+    {
+        if(e.button & 1)
+            gl.mouse.leftDown = true;
+        if(e.button & 2)
+            gl.mouse.rightDown = true;
+        if(e.button & 4)
+            gl.mouse.middleDown = true;
+    }
+    //log(gl.mouse);
+}
+
+function handleMouseUp(e)
+{
+    //e = e || window.event; // hack for IE
+    if("which" in e)
+    {
+        switch(e.which)
+        {
+        case 1:
+            gl.mouse.leftDown = false;
+            break;
+        case 2:
+            gl.mouse.middleDown = false;
+            break;
+        case 3:
+            gl.mouse.rightDown = false;
+            break;
+        }
+    }
+    else if("button" in e) // for IE
+    {
+        if(e.button & 1)
+            gl.mouse.leftDown = false;
+        if(e.button & 2)
+            gl.mouse.rightDown = false;
+        if(e.button & 4)
+            gl.mouse.middleDown = false;
+    }
+    //log(gl.mouse);
+}
+
+function handleMouseWheel(e)
+{
+    const ZOOM_SCALE = 0.2;
+
+    var delta = 0;
+    if("wheelDelta" in e)
+    {
+        delta = e.wheelDelta / 120;
+    }
+    else // firefox
+    {
+        // firefox has different delta and scale.
+        delta = -e.detail / 3;
+    }
+
+    // positive delta = scroll up
+    // negative delta = scroll down
+    if(delta != 0)
+    {
+        var deltaDistance = delta * ZOOM_SCALE;
+        log(deltaDistance);
+        gl.camera.moveForward(deltaDistance);
+        gl.selectBuffer.invalid = true;
+    }
+
+    e.preventDefault();
+}
+
+function handleClick(e)
+{
+}
+
+function handleMouseOut(e)
+{
+    gl.mouse.leftDown = false;
+    gl.mouse.rightDown = false;
+}
+
+function handleContextMenu(e)
+{
+    e.preventDefault(); // disable context menu
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL(width, height)
+{
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);   // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+    gl.cullFace(gl.BACK);
+
+    initVBOs();
+
+    // default light
+    gl.light = new Light(0, 0, 5, 1);
+    //gl.light.position.normalize(); //@@ fix normalize()
+    gl.light.color.set(1.0, 1.0, 1.0, 1.0);     // light color
+    gl.light.attenuations.set(1, 0, 0);         // attenuations (constant, linear, quad)
+    log("    Light Position: " + gl.light.position);
+    log("       Light Color: " + gl.light.color);
+    log("Light Attenuations: " + gl.light.attenuations);
+    log();
+
+    // default material
+    gl.material = new Material(0.7, 0.7, 0.7, 1.0); // with default diffuse
+    gl.material.ambient.set(0.2, 0.2, 0.2, 1.0);
+    gl.material.specular.set(0.1, 0.1, 0.1, 1);
+    gl.material.shininess = 128;
+    log("  Material Ambient: " + gl.material.ambient);
+    log("  Material Diffuse: " + gl.material.diffuse);
+    log(" Material Specualr: " + gl.material.specular);
+    log("Material Shininess: " + gl.material.shininess);
+    log();
+
+    // select material
+    gl.materialSelect = new Material(0.9, 0.1, 0.1, 1.0);
+    gl.materialSelect.ambient.set(0.2, 0.2, 0.2, 1.0);
+    gl.materialSelect.specular.set(0.1, 0.1, 0.1, 1);
+    gl.materialSelect.shininess = 128;
+    log("  Select Material Ambient: " + gl.materialSelect.ambient);
+    log("  Select Material Diffuse: " + gl.materialSelect.diffuse);
+    log(" Select Material Specualr: " + gl.materialSelect.specular);
+    log("Select Material Shininess: " + gl.materialSelect.shininess);
+    log();
+
+    // init matrices
+    gl.matrixProjection = Matrix4.makePerspective(45, width/height, 1, 100);
+    gl.matrixModel = new Matrix4();
+    gl.matrixView = new Matrix4();
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+
+    // default picking color
+    gl.pickColor = new Float32Array([1,0,0,1]);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create vbo for a cube
+///////////////////////////////////////////////////////////////////////////////
+function initVBOs()
+{
+    // cube ///////////////////////////////////////////////////////////////////
+    //    v5------v4  Using GL_TRIANGLES per side
+    //   /|      /|
+    //  v1------v0|
+    //  | |     | |
+    //  | |v6---|-|v7
+    //  |/      |/
+    //  v2------v3
+
+    // vertex coords array
+    var vertices = new Float32Array([ 1, 1, 1, -1, 1, 1, -1,-1, 1,  1,-1, 1,    // v0-v1-v2-v3
+                                      1, 1, 1,  1,-1, 1,  1,-1,-1,  1, 1,-1,    // v0-v3-v7-v4
+                                      1, 1, 1,  1, 1,-1, -1, 1,-1, -1, 1, 1,    // v0-v4-v5-v1
+                                     -1, 1, 1, -1, 1,-1, -1,-1,-1, -1,-1, 1,    // v1-v5-v6-v2
+                                     -1,-1,-1,  1,-1,-1,  1,-1, 1, -1,-1, 1,    // v6-v7-v3-v2
+                                     -1, 1,-1,  1, 1,-1,  1,-1,-1, -1,-1,-1]);  // v5-v4-v7-v6
+    // normal array
+    var normals = new Float32Array([ 0, 0, 1,  0, 0, 1,  0, 0, 1,  0, 0, 1,     // v0-v1-v2-v3
+                                     1, 0, 0,  1, 0, 0,  1, 0, 0,  1, 0, 0,     // v0-v3-v7-v4
+                                     0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,     // v0-v4-v5-v1
+                                    -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0,     // v1-v5-v6-v2
+                                     0,-1, 0,  0,-1, 0,  0,-1, 0,  0,-1, 0,     // v6-v7-v3-v2
+                                     0, 0,-1,  0, 0,-1,  0, 0,-1,  0, 0,-1]);   // v5-v4-v7-v6
+    // color array (r,g,b,a)
+    var colors = new Float32Array([1,1,1,1,  1,1,0,1,  1,0,0,1,  1,0,1,1,       // v0-v1-v2-v3
+                                   1,1,1,1,  1,0,1,1,  0,0,1,1,  0,1,1,1,       // v0-v3-v7-v4
+                                   1,1,1,1,  0,1,1,1,  0,1,0,1,  1,1,0,1,       // v0-v4-v5-v1
+                                   1,1,0,1,  0,1,0,1,  0,0,0,1,  1,0,0,1,       // v1-v5-v6-v2
+                                   0,0,0,1,  0,0,1,1,  1,0,1,1,  1,0,0,1,       // v6-v7-v3-v2
+                                   0,1,0,1,  0,1,1,1,  0,0,1,1,  0,0,0,1]);     // v5-v4-v7-v6
+    // index array (2 triangles per side)
+    var indices = new Uint8Array([ 0,  1,  2,    2,  3,  0,                     // v0-v1-v2, v2-v3-v0
+                                   4,  5,  6,    6,  7,  4,                     // v0-v3-v7, v7-v4-v0
+                                   8,  9, 10,   10, 11,  8,                     // v0-v4-v5, v5-v1-v0
+                                  12, 13, 14,   14, 15, 12,                     // v1-v5-v6, v6-v2-v1
+                                  16, 17, 18,   18, 19, 16,                     // v6-v7-v3, v3-v2-v6
+                                  20, 21, 22,   22, 23, 20]);                   // v5-v4-v7, v7-v6-v5
+
+    // create interleaved vertex buffer
+    vboVertex = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboVertex);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices.byteLength + normals.byteLength + colors.byteLength, gl.STATIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
+    gl.bufferSubData(gl.ARRAY_BUFFER, vertices.byteLength, normals);
+    gl.bufferSubData(gl.ARRAY_BUFFER, vertices.byteLength + normals.byteLength, colors);
+    vboVertex.normalOffset = vertices.byteLength;
+    vboVertex.colorOffset = vertices.byteLength + normals.byteLength;
+
+    vboIndex = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vboIndex);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+    vboIndex.indexCount = indices.length;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL()
+{
+    // enable all vertexAttribArray
+    initVertexAttribArrays(gl);
+
+    // load shaders
+    gl.shaderPrograms = {}; // associative array
+
+    // load select shader
+    createShaderProgram(gl, "files/glsl/gles_select.vert", "files/glsl/gles_select.frag").then(program =>
+    {
+        //gl.useProgram(program);
+
+        // setup uniforms
+        //gl.uniform4fv(program.uniform.pickColor, gl.pickColor);
+
+        gl.shaderPrograms["select"] = program;
+    });
+
+    // load normal rendering shader
+    createShaderProgram(gl, "files/glsl/gles_phong.vert", "files/glsl/gles_phong.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        gl.uniform4fv(program.uniform.lightColor, gl.light.getColor());
+        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
+        gl.uniform3fv(program.uniform.lightAttenuations, gl.light.getAttenuations());
+        gl.uniform4fv(program.uniform.materialAmbient, gl.material.getAmbient());
+        gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
+        gl.uniform4fv(program.uniform.materialSpecular, gl.material.getSpecular());
+        gl.uniform1f(program.uniform.materialShininess, gl.material.shininess);
+
+        gl.shaderPrograms["phong"] = program;
+    });
+}
+
+
+
+
+function compatibilityCode()
+{
+    // Firefox compatibility code
+    // The WebGL*Array where named Canvas*Array in the past.
+    // However, this will only affect old nightly builds. The current nightly does already
+    // support the new names. (13 Dec 2009).
+    try{
+        WebGLFloatArray;
+    }catch(e){
+        try{
+            WebGLArrayBuffer = CanvasArrayBuffer;
+            WebGLByteArray = CanvasByteArray;
+            WebGLUnsignedByteArray = CanvasUnsignedByteArray;
+            WebGLShortArray = CanvasShortArray;
+            WebGLUnsignedShortArray = CanvasUnsignedShortArray;
+            WebGLIntArray = CanvasIntArray;
+            WebGLUnsignedIntArray = CanvasUnsignedIntArray;
+            WebGLFloatArray = CanvasFloatArray;
+        }catch(e){
+            alert("Could not find Canvas array types for WebGL.");
+        }
+    }
+
+    // Google Chrome compatibility code
+    // Since a JavaScript function may have multiple return types, functions
+    // 'getProgrami' and 'getShaderi' where renamed. However, Chrome does still
+    // use the old names.  (30 Nov 2009)
+    if(!gl.getProgramParameter)
+    {
+        gl.getProgramParameter = gl.getProgrami;
+    }
+    if(!gl.getShaderParameter)
+    {
+        gl.getShaderParameter = gl.getShaderi;
+    }
+}
+
+
+// ]]>
+</script>
+
+</head>
+
+<body>
+
+<div class="contentblock">
+
+<!-- left column ==================================================== -->
+<div class="flexcol">
+<canvas id="webglview" width="500" height="500">
+Your browser does not support canvas element!
+</canvas>
+</div>
+
+<!-- right column =================================================== -->
+<div class="flexcol">
+
+<h3>Mouse Picking using Selection Buffer</h3>
+<p>
+Mouse Interface
+</p>
+<ul>
+	<li><strong>Left</strong> button: Rotate Camera</li>
+	<li><strong>Right</strong> button: Zoom Camera</li>
+</ul>
+
+<p>
+&nbsp;
+</p>
+
+<div id="mousepos">
+Mouse Position:
+</div>
+<div id="indexvalue">
+Pick ID:
+</div>
+
+</div> <!-- end of right column -->
+
+
+
+</div> <!-- end of contentblock -->
+</body>
+</html>

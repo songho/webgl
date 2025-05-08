@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- ==========================================================================
+testing drawing with mouse
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2017-07-19
+UPDATED: 2017-08-11
+===============================================================================
+-->
+
+<head>
+<title>Paint</title>
+<meta name="generator" content="editplus" />
+<meta name="author" content="Song Ho Ahn" />
+<meta name="keywords" content="" />
+<meta name="description" content="" />
+<meta charset="utf-8">
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    font-size:12px;
+}
+p {
+    margin:0 0 1em 0;
+}
+
+</style>
+
+
+
+<!-- JavaScript -->
+<script type="text/javascript"src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script type="text/javascript" src="files/js/Vectors.js"></script>
+<script type="text/javascript" src="files/js/Matrices.js"></script>
+<script type="text/javascript" src="files/js/Quaternion.js"></script>
+<script type="text/javascript" src="files/js/Light.js"></script>
+<script type="text/javascript" src="files/js/Material.js"></script>
+<script type="text/javascript" src="files/js/Timer.js"></script>
+<script type="text/javascript" src="files/js/FrameRate.js"></script>
+<script type="text/javascript" src="files/js/MouseState.js"></script>
+<script type="text/javascript" src="files/js/Camera.js"></script>
+<script type="text/javascript" src="files/js/Sprite.js"></script>
+<script type="text/javascript" src="files/js/PenTool.js"></script>
+<script type="text/javascript" src="files/js/webglUtils.js"></script>
+
+
+<script type="text/javascript">
+// <![CDATA[
+
+var gl = null;
+
+var IMAGE_PATH = "files/textures/";
+var GLSL_PATH = "files/glsl/";
+var BRUSH_SIZE = 10;
+
+
+
+document.addEventListener("DOMContentLoaded", function(e)
+{
+    //Logger.open();
+
+    var success = startWebGL("webglView");
+    if(!success)
+        return;
+
+    // params
+    var rangeWidth = document.getElementById("rangew");
+    var textWidth = document.getElementById("textw");
+    rangeWidth.value = BRUSH_SIZE;
+    textWidth.value = BRUSH_SIZE;
+    rangeWidth.addEventListener("input", function(e)
+    {
+        var size = parseInt(this.value) || BRUSH_SIZE;
+        textWidth.value = this.value;
+        gl.pen.setWidth(size);
+    });
+
+    var rangeR = document.getElementById("ranger");
+    var rangeG = document.getElementById("rangeg");
+    var rangeB = document.getElementById("rangeb");
+    var rangeA = document.getElementById("rangea");
+    var textR = document.getElementById("textr");
+    var textG = document.getElementById("textg");
+    var textB = document.getElementById("textb");
+    var textA = document.getElementById("texta");
+    rangeR.value = 1.0;
+    rangeG.value = 0.0;
+    rangeB.value = 0.0;
+    rangeA.value = 1.0;
+    textR.value = 1.0;
+    textG.value = 0.0;
+    textB.value = 0.0;
+    textA.value = 1.0;
+    setColor(rangeR.value, rangeG.value, rangeB.value, rangeA.value);
+
+    rangeR.addEventListener("input", function(e)
+    {
+        textR.value = this.value;
+        setColor(rangeR.value, rangeG.value, rangeB.value, rangeA.value);
+    });
+    rangeG.addEventListener("input", function(e)
+    {
+        textG.value = this.value;
+        setColor(rangeR.value, rangeG.value, rangeB.value, rangeA.value);
+    });
+    rangeB.addEventListener("input", function(e)
+    {
+        textB.value = this.value;
+        setColor(rangeR.value, rangeG.value, rangeB.value, rangeA.value);
+    });
+    rangeA.addEventListener("input", function(e)
+    {
+        textA.value = this.value;
+        setColor(rangeR.value, rangeG.value, rangeB.value, rangeA.value);
+    });
+
+    var buttonUndo = document.getElementById("undo");
+    buttonUndo.addEventListener("click", function(e)
+    {
+        gl.pen.undo();
+        frame();
+    });
+
+    var buttonClear = document.getElementById("clear");
+    buttonClear.addEventListener("click", function(e)
+    {
+        gl.pen.reset();
+        frame();
+    });
+});
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function setColor(r, g, b, a)
+{
+    var color = document.getElementById("color");
+    color.style.backgroundColor = "rgba(" + Math.round(r*255) + ", " + Math.round(g*255) + ", " + Math.round(b*255) + ", " + a + ")";
+    //color.style.backgroundColor = "rgb(" + Math.round(r*255) + ", " + Math.round(g*255) + ", " + Math.round(b*255) + ")";
+    //log("rgb(" + Math.round(r*255) + ", " + Math.round(g*255) + ", " + Math.round(b*255) + ")");
+    gl.pen.setColor(r, g, b, a);
+}
+
+
+
+// WebGL ======================================================================
+function startWebGL(canvasId)
+{
+    try{
+
+    var canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        var parentNode = canvas.parentNode;
+        var message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        parentNode.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                               message +
+                               "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // resize canvas window to fit in the parent
+    canvas.width = canvas.parentNode.clientWidth;
+    canvas.height = canvas.width / 2;
+
+    // get context
+    gl = getContextGL(canvas);
+    if(!gl)
+    {
+        log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // remember the canvas
+    gl.canvas = canvas;
+
+    initGL(gl);
+    initGLSL(gl);
+    log("WebGL is initialized.\n");
+
+    // init app ===============================================================
+
+    // premultiplied alpha texture
+    gl.tex0 = loadTexture(gl, "files/images/penpoint.png", false, textureLoaded);
+    //gl.tex0 = loadTexture(gl, "files/images/penpoint_orig.png", false, textureLoaded);
+
+    // add mouse state holder
+    gl.mouse = new MouseState();
+
+    // init touch states
+    gl.touches = [];
+
+    // init pentool
+    gl.pen = new PenTool(gl);
+    gl.pen.setColor(1, 0, 0, 1);
+    gl.pen.setWidth(10);
+
+    // register event handlers
+    registerEventHandlers(canvas);
+    handleResize();
+
+    return true;
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+        return false;
+    }
+
+    return true;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function textureLoaded()
+{
+    frame();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    drawPoints();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// post frame
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw points
+///////////////////////////////////////////////////////////////////////////////
+function drawPoints()
+{
+    // set active program
+    gl.program = gl.shaderPrograms["pointTex"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
+
+    gl.disable(gl.DEPTH_TEST);
+    gl.pen.draw();
+    gl.enable(gl.DEPTH_TEST);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// register event handlers to canvas
+///////////////////////////////////////////////////////////////////////////////
+function registerEventHandlers(canvas)
+{
+    // register event handlers
+    window.addEventListener("resize",  handleResize, false);
+    log("Added window resize event listener, handleResize().");
+
+    canvas.addEventListener("mousemove", handleMouseMove, false);
+    log("Added canvas mousemove event listener, handleMouseMove().");
+
+    canvas.addEventListener("mousedown", handleMouseDown, false);
+    log("Added canvas mousedown event listener, handleMouseDown().");
+
+    canvas.addEventListener("mouseup", handleMouseUp, false);
+    log("Added canvas mouseup event listener, handleMouseUp().");
+
+    canvas.addEventListener("mouseout", handleMouseOut, false);
+    log("Added canvas mouseout event listener, handleMouseOut().");
+
+    canvas.addEventListener("contextmenu", handleContextMenu, false);
+    log("Added canvas contextmenu event listener, handleContextMenu().");
+
+    // canvas touch events
+    canvas.addEventListener("touchstart", handleTouchStart, false);
+    log("Added canvas touchstart event listener, handleTouchStart().");
+
+    canvas.addEventListener("touchmove", handleTouchMove, false);
+    log("Added canvas touchmove event listener, handleTouchMove().");
+
+    canvas.addEventListener("touchend", handleTouchEnd, false);
+    log("Added canvas touchend event listener, handleTouchEnd().");
+
+    canvas.addEventListener("touchleave", handleTouchLeave, false);
+    log("Added canvas touchleave event listener, handleTouchLeave().");
+
+    canvas.addEventListener("touchcancel", handleTouchCancel, false);
+    log("Added canvas touchcancel event listener, handleTouchCancel().");
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the window is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize()
+{
+    // get the client dimension of whole window
+    var width = gl.canvas.parentNode.clientWidth;
+    var height = gl.canvas.parentNode.clientHeight;
+
+    // adjust canvas dimension
+    gl.canvas.width = width;
+    gl.canvas.height = width / 2;
+
+    // reset viewport and projection matrix
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makeOrthographic(0, gl.canvas.width, 0, gl.canvas.height, -1, 1);
+
+    // update shader
+    if(gl.shaderPrograms && gl.shaderPrograms["pointTex"])
+    {
+        var program = gl.shaderPrograms["pointTex"];
+        gl.uniformMatrix4fv(program.uniform.matrixModelViewProjection, false, gl.matrixProjection.m);
+        frame();
+    }
+
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handlers for mouse event
+///////////////////////////////////////////////////////////////////////////////
+function handleMouseMove(e)
+{
+    var offset = getElementOffset(this);
+    gl.mouse.x = e.clientX - offset.x;
+    gl.mouse.y = e.clientY - offset.y;
+    //log("pointer: (" + gl.mouse.x + ", " + gl.mouse.y + ")");
+
+    if(gl.mouse.leftDown)
+    {
+        gl.pen.moveTo(gl.mouse.x, gl.canvas.height - gl.mouse.y);
+        frame();
+    }
+}
+
+function handleMouseDown(e)
+{
+    // remember mouse position when mouse down
+    var offset = getElementOffset(this);
+    gl.mouse.x = e.clientX - offset.x;
+    gl.mouse.y = e.clientY - offset.y;
+    //log("down: (" + gl.mouse.x + ", " + gl.mouse.y + ")");
+
+    //e = e || window.event; // hack for IE
+    if("which" in e)
+    {
+        switch(e.which)
+        {
+            case 1: gl.mouse.leftDown = true;   break;
+            case 2: gl.mouse.middleDown = true; break;
+            case 3: gl.mouse.rightDown = true;  break;
+        }
+    }
+    else if("button" in e) // for IE
+    {
+        if(e.button & 1) gl.mouse.leftDown = true;
+        if(e.button & 2) gl.mouse.rightDown = true;
+        if(e.button & 4) gl.mouse.middleDown = true;
+    }
+
+    if(gl.mouse.leftDown)
+    {
+        gl.pen.startAt(gl.mouse.x, gl.canvas.height - gl.mouse.y);
+        frame();
+    }
+
+    e.preventDefault(); // disable context menu
+}
+
+function handleMouseUp(e)
+{
+    //e = e || window.event; // hack for IE
+    if("which" in e)
+    {
+        switch(e.which)
+        {
+            case 1: gl.mouse.leftDown = false;      break;
+            case 2: gl.mouse.middleDown = false;    break;
+            case 3: gl.mouse.rightDown = false;     break;
+        }
+    }
+    else if("button" in e) // for IE
+    {
+        if(e.button & 1) gl.mouse.leftDown = false;
+        if(e.button & 2) gl.mouse.rightDown = false;
+        if(e.button & 4) gl.mouse.middleDown = false;
+    }
+}
+
+function handleMouseOut(e)
+{
+    gl.mouse.leftDown = false;
+    gl.mouse.rightDown = false;
+}
+
+function handleContextMenu(e)
+{
+    e.preventDefault(); // disable context menu
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handle touch events
+///////////////////////////////////////////////////////////////////////////////
+function handleTouchStart(e)
+{
+    e.preventDefault(); // prevent mouse event being delivered
+
+    var touches = e.changedTouches;
+    for(var i = 0; i < touches.length; ++i)
+    {
+        gl.touches.push(copyTouch(touches[i]));
+        gl.touches.distance = 0;
+        //log("Touch started:" + findTouchIndex(touches[i]));
+    }
+
+    var touch = gl.touches[0];
+    gl.pen.startAt(touch.pageX, gl.canvas.height-touch.pageY);
+    frame();
+}
+
+function handleTouchEnd(e)
+{
+    e.preventDefault();
+    // remove all touches
+    gl.touches.length = 0;
+}
+
+function handleTouchMove(e)
+{
+    e.preventDefault();
+    var touches = e.changedTouches;
+    var touch1, touch2; // current touches
+
+    for(var i = 0; i < touches.length; ++i)
+    {
+        //log("Touch Moved:" + findTouchIndex(touches[i]));
+        var index = findTouchIndex(touches[i]);
+        if(index == 0)
+            touch1 = touches[i];
+        else if(index == 1)
+            touch2 = touches[i];
+    }
+
+    gl.pen.moveTo(touch1.pageX, gl.canvas.height-touch1.pageY);
+    frame();
+}
+
+function handleTouchCancel(e)
+{
+    gl.touches.length = 0;
+    //log("Touch canceled.");
+}
+
+function handleTouchLeave(e)
+{
+    gl.touches.length = 0;
+    //log("Touch left.");
+}
+
+function copyTouch(touch)
+{
+    return {identifier:touch.identifier, pageX:touch.pageX, pageY:touch.pageY};
+}
+
+function findTouchIndex(touch)
+{
+    for(var i = 0; i < gl.touches.length; ++i)
+    {
+        if(touch.identifier == gl.touches[i].identifier)
+            return i;
+    }
+    return -1;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL(gl)
+{
+    gl.clearColor(1.0, 1.0, 1.0, 1.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);   // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+    gl.cullFace(gl.BACK);
+    gl.enable(gl.BLEND);        // enable blend
+    //gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL(gl)
+{
+    initVertexAttribArrays(gl);
+
+    // load shaders
+    gl.shaderPrograms = {}; // associative array
+    var program;
+
+    // load floor shader
+    createShaderProgram(gl, "files/glsl/gles_pointTex2d.vert", "files/glsl/gles_pointTex2d.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform1i(program.uniform.map0, 0);
+        gl.uniformMatrix4fv(program.uniform.matrixModelViewProjection, false, gl.matrixProjection.m);
+
+        gl.shaderPrograms["pointTex"] = program;
+    });
+}
+
+
+
+// ]]>
+</script>
+
+</head>
+<body>
+
+<div class="contentblock" style="margin:10px; padding:0;">
+
+<div style="position:relative; left:0; width:auto; line-height:0; border:1px solid #aaa; background:#000;">
+<canvas id="webglView">
+<p style="background:#fff;">
+Your browser does not support canvas element!
+</p>
+</canvas>
+</div>
+
+<h3>
+Draw with mouse pointer
+</h3>
+
+<!-- begin controls =========================================================== -->
+<div>
+
+<!-- column 1 ============================================= -->
+<div style="float:left; width:250px;">
+<div style="margin-bottom:5px;">
+<span style="display:inline-block; width:80px; text-align:left;">Pen Width:</span>
+<br />
+<input id="rangew" type="range" name="rangew" value="10" min="1" max="100" step="1" size="20" style="vertical-align:middle;" />
+<input id="textw" type="text" name="textw" size="5" value="10" />
+</div>
+<br />
+<div style="margin-top:10px;">
+<button id="undo" type="button" style=" width:40%">Undo</button>
+<button id="clear" type="button" style=" width:40%">Clear</button>
+</div>
+</div>
+<!-- end of column 1 -->
+
+<!-- column 2 ============================================= -->
+<div style="float:left; width:300px;">
+Point Color: <span id="color" style="display:inline-block; width:50px; height:16px; vertical-align:middle; border:1px solid #000;"></span>
+<br />
+<div style="margin-bottom:5px;">
+<span style="display:inline-block; width:40px; text-align:right;">Red:</span>
+<input id="ranger" type="range" name="ranger" value="1.0" min="0" max="1" step="0.01" size="20" style="vertical-align:middle;" />
+<input id="textr" type="text" name="textr" size="5" value="1" />
+</div>
+
+<div style="margin-bottom:5px;">
+<span style="display:inline-block; width:40px; text-align:right;">Green:</span>
+<input id="rangeg" type="range" name="rangeg" value="0.0" min="0" max="1" step="0.01" size="20" style="vertical-align:middle;" />
+<input id="textg" type="text" name="textg" size="5" value="0" />
+</div>
+
+<div style="margin-bottom:5px;">
+<span style="display:inline-block; width:40px; text-align:right;">Blue:</span>
+<input id="rangeb" type="range" name="rangeb" value="0.0" min="0" max="1" step="0.01" size="20" style="vertical-align:middle;" />
+<input id="textb" type="text" name="textb" size="5" value="0" />
+</div>
+
+<div style="margin-bottom:5px;">
+<span style="display:inline-block; width:40px; text-align:right;">Alpha:</span>
+<input id="rangea" type="range" name="rangea" value="0.0" min="0" max="1" step="0.01" size="20" style="vertical-align:middle;" />
+<input id="texta" type="text" name="texta" size="5" value="1" />
+</div>
+
+</div>
+<!-- end of column 2 -->
+
+</div>
+<!-- end of controls ========================================================== -->
+
+
+</div> <!-- end of contentblock -->
+
+
+</body>
+</html>

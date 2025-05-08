@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- ==========================================================================
+testing line intersection
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2017-06-16
+UPDATED: 2017-06-21
+===============================================================================
+-->
+
+<head>
+<title>Line Intersection</title>
+<meta charset="utf-8" />
+<meta name="generator" content="editplus" />
+<meta name="author" content="Song Ho Ahn" />
+<meta name="keywords" content="" />
+<meta name="description" content="" />
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    font-size:12px;
+}
+p {
+    margin:0 0 1em 0;
+}
+input[type=range] {
+    vertical-align:middle;
+}
+.contentblock {
+    position:relative;
+    margin:10px;
+}
+.leftblock {
+    float:left;
+    width:500px;
+    height:500px;
+    margin-bottom:1em;
+    border:1px solid #aaa;
+}
+.rightblock {
+    float:left;
+    margin-left:10px;
+}
+.clear {
+    clear:both;
+}
+.slidergroup {
+    border:1px solid #aaa;
+    margin-bottom:1em;
+}
+.col1 {
+    float:left;
+}
+.col2 {
+    width:1em;
+    text-align:right;
+}
+.col3 {
+    display:inline-block;
+    width:2em;
+    text-align:left;
+}
+.col4 {
+    display:inline-block;
+    width:10em;
+}
+.equation {
+    margin-top:0.5em;
+}
+#webglview1 {
+    width:100%;
+    height:100%;
+}
+#param1, #slope1, #stand1, #param2, #slope2, #stand2 {
+    font-family:"Times New Roman", Times, serif;
+}
+</style>
+
+
+
+<!-- JavaScript -->
+<script type="text/javascript"src="files/js/Logger.js"></script>
+<script type="text/javascript" src="files/js/Vectors.js"></script>
+<script type="text/javascript" src="files/js/Line.js"></script>
+<script type="text/javascript" src="files/js/LineSegment.js"></script>
+<script type="text/javascript" src="files/js/Matrices.js"></script>
+<script type="text/javascript" src="files/js/webglUtils.js"></script>
+
+
+<script type="text/javascript">
+// <![CDATA[
+
+var gl = null;
+var GLSL_PATH = "files/glsl/";
+var SCREEN_WIDTH = 500;     // px
+var SCREEN_HEIGHT = 500;    // px
+var POINT_SIZE = 15;
+var P1_X = -8;
+var P1_Y = -4;
+var P2_X = 7;
+var P2_Y = 6;
+var Q1_X = -2;
+var Q1_Y = 8;
+var Q2_X = 6;
+var Q2_Y = -8;
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// main entry point
+document.addEventListener("DOMContentLoaded", function(e)
+{
+    Logger.open();
+
+    gl = initWebGL("webglview1");
+    if(!gl)
+        return;
+
+    initPage(gl);
+    frame(gl);
+});
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function initPage(gl)
+{
+    var rangeP1x = document.getElementById("rangeP1x");
+    rangeP1x.value = P1_X;
+    rangeP1x.oninput = function()
+    {
+        document.getElementById("labelP1x").innerHTML = rangeP1x.value;
+        gl.p1.x = parseFloat(rangeP1x.value);
+        update(gl);
+    };
+    document.getElementById("labelP1x").innerHTML = rangeP1x.value;
+
+    var rangeP1y = document.getElementById("rangeP1y");
+    rangeP1y.value = P1_Y;
+    rangeP1y.oninput = function()
+    {
+        document.getElementById("labelP1y").innerHTML = rangeP1y.value;
+        gl.p1.y = parseFloat(rangeP1y.value);
+        update(gl);
+    };
+    document.getElementById("labelP1y").innerHTML = rangeP1y.value;
+
+    var rangeP2x = document.getElementById("rangeP2x");
+    rangeP2x.value = P2_X;
+    rangeP2x.oninput = function()
+    {
+        document.getElementById("labelP2x").innerHTML = rangeP2x.value;
+        gl.p2.x = parseFloat(rangeP2x.value);
+        update(gl);
+    };
+    document.getElementById("labelP2x").innerHTML = rangeP2x.value;
+
+    var rangeP2y = document.getElementById("rangeP2y");
+    rangeP2y.value = P2_Y;
+    rangeP2y.oninput = function()
+    {
+        document.getElementById("labelP2y").innerHTML = rangeP2y.value;
+        gl.p2.y = parseFloat(rangeP2y.value);
+        update(gl);
+    };
+    document.getElementById("labelP2y").innerHTML = rangeP2y.value;
+
+    var rangeQ1x = document.getElementById("rangeQ1x");
+    rangeQ1x.value = Q1_X;
+    rangeQ1x.oninput = function()
+    {
+        document.getElementById("labelQ1x").innerHTML = rangeQ1x.value;
+        gl.q1.x = parseFloat(rangeQ1x.value);
+        update(gl);
+    };
+    document.getElementById("labelQ1x").innerHTML = rangeQ1x.value;
+
+    var rangeQ1y = document.getElementById("rangeQ1y");
+    rangeQ1y.value = Q1_Y;
+    rangeQ1y.oninput = function()
+    {
+        document.getElementById("labelQ1y").innerHTML = rangeQ1y.value;
+        gl.q1.y = parseFloat(rangeQ1y.value);
+        update(gl);
+    };
+    document.getElementById("labelQ1y").innerHTML = rangeQ1y.value;
+
+    var rangeQ2x = document.getElementById("rangeQ2x");
+    rangeQ2x.value = Q2_X;
+    rangeQ2x.oninput = function()
+    {
+        document.getElementById("labelQ2x").innerHTML = rangeQ2x.value;
+        gl.q2.x = parseFloat(rangeQ2x.value);
+        update(gl);
+    };
+    document.getElementById("labelQ2x").innerHTML = rangeQ2x.value;
+
+    var rangeQ2y = document.getElementById("rangeQ2y");
+    rangeQ2y.value = Q2_Y;
+    rangeQ2y.oninput = function()
+    {
+        document.getElementById("labelQ2y").innerHTML = rangeQ2y.value;
+        gl.q2.y = parseFloat(rangeQ2y.value);
+        update(gl);
+    };
+    document.getElementById("labelQ2y").innerHTML = rangeQ2y.value;
+
+    var buttonReset = document.getElementById("resetPoints");
+    buttonReset.onclick = function()
+    {
+        resetPoints(gl);
+    };
+
+    gl.lineParam1 = document.getElementById("param1");
+    gl.lineSlope1 = document.getElementById("slope1");
+    gl.lineStand1 = document.getElementById("stand1");
+    gl.lineParam2 = document.getElementById("param2");
+    gl.lineSlope2 = document.getElementById("slope2");
+    gl.lineStand2 = document.getElementById("stand2");
+    gl.intersect = document.getElementById("intersect");
+
+    update(gl);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function initWebGL(canvasId)
+{
+    try{
+
+    var canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        var parentNode = canvas.parentNode;
+        var message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        parentNode.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                               message +
+                               "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // resize canvas window to fit in the parent
+    canvas.width = canvas.parentNode.clientWidth;
+    canvas.height = canvas.parentNode.clientHeight;
+    //log(canvas.width + ", " + canvas.height);
+
+    // get context
+    var gl = getContextGL(canvas);
+    if(!gl)
+    {
+        //log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // remember the canvas
+    gl.canvas = canvas;
+
+    initGL(gl);
+    initGLSL(gl);
+    log("WebGL is initialized.\n");
+
+    // register event handlers
+    registerEventHandlers(gl);
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+        return false;
+    }
+
+    return gl;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame(gl)
+{
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    drawGrid(gl);
+    drawLines(gl);
+    drawPoints(gl);
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+function drawGrid(gl)
+{
+    // set active program
+    gl.program = gl.shaderPrograms["flat"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    // matrix
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, gl.matrixModel.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+
+    var color = new Float32Array([0.7, 0.7, 0.7, 1]);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, color);
+
+    var line = new LineSegment(gl);
+    line.setWidth(1, 22/SCREEN_WIDTH);
+    for(var i = -10; i <= 10; ++i)
+    {
+        line.draw(i, -11, 0, i, 11, 0); // vertical
+        line.draw(-11, i, 0, 11, i, 0); // horizontal
+    }
+
+    // center lines
+    line.setWidth(3, 22/SCREEN_WIDTH);
+    color = new Float32Array([0.1, 0.1, 0.1, 1]);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, color);
+    line.draw(-11, 0, 0, 11, 0, 0);
+    line.draw(0, -11, 0, 0, 11, 0);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function drawLines(gl)
+{
+    // set active program
+    gl.program = gl.shaderPrograms["flat"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    // matrix
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, gl.matrixModel.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+
+    var color = new Float32Array([0.9, 0.5, 0.5, 1]);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, color);
+
+    var line = new LineSegment(gl);
+    line.setWidth(4, 22 / SCREEN_WIDTH);
+    line.setWidth(2, 22 / SCREEN_WIDTH);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([1, 0.5, 0.5, 1]));
+    line.draw(gl.p1.x, gl.p1.y, gl.p1.z, gl.p2.x, gl.p2.y, gl.p2.z);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([0.5, 0.5, 1, 1]));
+    line.draw(gl.q1.x, gl.q1.y, gl.q1.z, gl.q2.x, gl.q2.y, gl.q2.z);
+
+    // extended lines
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([1, 0.85, 0.85, 1]));
+    var dir = gl.line1.direction.clone().normalize();
+    var p = dir.clone().scale(-30).add(gl.p1);
+    line.draw(gl.p1.x, gl.p1.y, gl.p1.z, p.x, p.y, p.z);
+    p = dir.clone().scale(30).add(gl.p2);
+    line.draw(gl.p2.x, gl.p2.y, gl.p2.z, p.x, p.y, p.z);
+
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([0.85, 0.85, 1, 1]));
+    dir = gl.line2.direction.clone().normalize();
+    p = dir.clone().scale(-30).add(gl.q1);
+    line.draw(gl.q1.x, gl.q1.y, gl.q1.z, p.x, p.y, p.z);
+    p = dir.clone().scale(30).add(gl.q2);
+    line.draw(gl.q2.x, gl.q2.y, gl.q2.z, p.x, p.y, p.z);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function drawPoints(gl)
+{
+    // set active program
+    gl.program = gl.shaderPrograms["point"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+
+    var color1 = new Float32Array([1, 0, 0, 1]);
+    var color2 = new Float32Array([0, 0, 1, 1]);
+    var color3 = new Float32Array([0, 0, 0, 1]);
+    var matrix = new Matrix4();
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboPoint);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+
+    // points for line 1
+    gl.uniform4fv(gl.program.uniform.color, color1);
+    matrix.setTranslation(gl.p1.x, gl.p1.y, gl.p1.z);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.POINTS, 0, 1);
+
+    matrix.setTranslation(gl.p2.x, gl.p2.y, gl.p2.z);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.POINTS, 0, 1);
+
+    // draw for line 2
+    gl.uniform4fv(gl.program.uniform.color, color2);
+    matrix.setTranslation(gl.q1.x, gl.q1.y, gl.q1.z);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.POINTS, 0, 1);
+
+    matrix.setTranslation(gl.q2.x, gl.q2.y, gl.q2.z);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.POINTS, 0, 1);
+
+    // intersection point
+    if(gl.intersectPoint && gl.intersectPoint.x != NaN)
+    {
+        gl.uniform4fv(gl.program.uniform.color, color3);
+        matrix.setTranslation(gl.intersectPoint.x, gl.intersectPoint.y, gl.intersectPoint.z);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.drawArrays(gl.POINTS, 0, 1);
+    }
+
+    // unbind
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extensions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// register event handlers to canvas
+///////////////////////////////////////////////////////////////////////////////
+function registerEventHandlers(gl)
+{
+    // register event handlers
+    window.addEventListener("resize",  function(){handleResize(gl);}, false);
+    log("Added window resize event listener, handleResize().");
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the window is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize(gl)
+{
+    // get the client dimension of whole window
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+
+    // reset viewport and projection matrix
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makeOrthographic(-11, 11, -11, 11, -1, 1);
+
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL(gl)
+{
+    gl.clearColor(1.0, 1.0, 1.0, 1.0);
+    gl.clearDepth(1.0);
+    //gl.enable(gl.DEPTH_TEST);   // enable depth test
+    //gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+    gl.cullFace(gl.BACK);
+    gl.enable(gl.BLEND);        // enable blend
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    //gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+    gl.p1 = new Vector3(P1_X, P1_Y, 0);
+    gl.p2 = new Vector3(P2_X, P2_Y, 0);
+    gl.q1 = new Vector3(Q1_X, Q1_Y, 0);
+    gl.q2 = new Vector3(Q2_X, Q2_Y, 0);
+    gl.intersectPoint = undefined;
+
+    // init point vbo
+    var point = new Float32Array([0,0,0]);  // (x,y,z)
+    gl.vboPoint = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboPoint);
+    gl.bufferData(gl.ARRAY_BUFFER, point, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    // init line equations
+    gl.line1 = new Line(gl.p1, gl.p2);
+    gl.line2 = new Line(gl.q1, gl.q2);
+
+    // point color
+    gl.color1 = new Float32Array([1.0, 0.0, 0.0, 1.0]);
+    gl.color2 = new Float32Array([1.0, 0.0, 0.0, 1.0]);
+    gl.color3 = new Float32Array([1.0, 0.0, 0.0, 1.0]);
+    gl.color4 = new Float32Array([1.0, 0.0, 0.0, 1.0]);
+
+    // init matrices
+    handleResize(gl);
+    gl.matrixModel = new Matrix4();
+    gl.matrixView = new Matrix4();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL(gl)
+{
+    initVertexAttribArrays(gl);
+
+    // load shaders
+    gl.shaderPrograms = {}; // associative array
+
+    // load flat shader
+    createShaderProgram(gl, GLSL_PATH+"gles_flat.vert", GLSL_PATH+"gles_flat.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.materialDiffuse, new Float32Array([1,1,1,1]));
+        gl.uniform1i(program.uniform.matrixComputed, false);
+
+        gl.shaderPrograms["flat"] = program;
+        frame(gl);
+    });
+
+    // load point shader
+    createShaderProgram(gl, GLSL_PATH+"gles_point.vert", GLSL_PATH+"gles_point.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.color, new Float32Array([1,1,1,1]));
+        gl.uniform1f(program.uniform.pointSize, POINT_SIZE);
+
+        gl.shaderPrograms["point"] = program;
+        frame(gl);
+    });
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+function update(gl)
+{
+    gl.line1.set(gl.p1, gl.p2);
+    gl.line2.set(gl.q1, gl.q2);
+
+    // line 1
+    gl.lineParam1.innerHTML = "(" + gl.line1.point.x.toFixed(1) + ", " + gl.line1.point.y.toFixed(1) + ") + t(" +
+                              gl.line1.direction.x.toFixed(1) + ", " + gl.line1.direction.y.toFixed(1) + ")";
+    if(gl.p2.x - gl.p1.x != 0)
+    {
+        var slope = (gl.p2.y - gl.p1.y) / (gl.p2.x - gl.p1.x);
+        var yIntercept = gl.p1.y - slope * gl.p1.x;
+        if(gl.p2.y - gl.p1.y != 0)
+        {
+            if(Math.abs(slope) != 1)
+                gl.lineStand1.innerHTML = (-slope).toFixed(2) + "x + y";
+            else
+                gl.lineStand1.innerHTML = slope > 0 ? "-x + y" : "x + y";
+
+            gl.lineSlope1.innerHTML = "y = " + slope.toFixed(2) + "x";
+            if(yIntercept != 0)
+            {
+                gl.lineSlope1.innerHTML += (yIntercept > 0 ? " + " : " - ") + Math.abs(yIntercept.toFixed(2));
+                gl.lineStand1.innerHTML += (yIntercept > 0 ? " - " : " + ") + Math.abs(yIntercept.toFixed(2)) + " = 0";
+            }
+            else
+            {
+                gl.lineStand1.innerHTML += " = 0";
+            }
+        }
+        else
+        {
+            gl.lineSlope1.innerHTML = "y = " + yIntercept.toFixed(2);
+            if(yIntercept != 0)
+                gl.lineStand1.innerHTML = "y" + (yIntercept > 0 ? " - " : " + ") + Math.abs(yIntercept.toFixed(2)) + " = 0";
+            else
+                gl.lineStand1.innerHTML = "y = 0";
+        }
+    }
+    else
+    {
+        gl.lineSlope1.innerHTML = "x = " + gl.p1.x.toFixed(2);
+        if(gl.p1.x != 0)
+            gl.lineStand1.innerHTML = "x" + (gl.p1.x > 0 ? " - " : " + ") + Math.abs(gl.p1.x.toFixed(2)) + " = 0";
+        else
+            gl.lineStand1.innerHTML = "x = 0";
+    }
+
+    // line 2
+    gl.lineParam2.innerHTML = "(" + gl.line2.point.x.toFixed(1) + ", " + gl.line2.point.y.toFixed(1) + ") + t(" +
+                              gl.line2.direction.x.toFixed(1) + ", " + gl.line2.direction.y.toFixed(1) + ")";
+    if(gl.q2.x - gl.q1.x != 0)
+    {
+        var slope = (gl.q2.y - gl.q1.y) / (gl.q2.x - gl.q1.x);
+        var yIntercept = gl.q1.y - slope * gl.q1.x;
+        if(gl.q2.y - gl.q1.y != 0)
+        {
+            if(Math.abs(slope) != 1)
+                gl.lineStand2.innerHTML = (-slope).toFixed(2) + "x + y";
+            else
+                gl.lineStand2.innerHTML = slope > 0 ? "-x + y" : "x + y";
+
+            gl.lineSlope2.innerHTML = "y = " + slope.toFixed(2) + "x";
+            if(yIntercept != 0)
+            {
+                gl.lineSlope2.innerHTML += (yIntercept > 0 ? " + " : " - ") + Math.abs(yIntercept.toFixed(2));
+                gl.lineStand2.innerHTML += (yIntercept > 0 ? " - " : " + ") + Math.abs(yIntercept.toFixed(2)) + " = 0";
+            }
+            else
+            {
+                gl.lineStand2.innerHTML += " = 0";
+            }
+        }
+        else
+        {
+            gl.lineSlope2.innerHTML = "y = " + yIntercept.toFixed(2);
+            if(yIntercept != 0)
+                gl.lineStand2.innerHTML = "y" + (yIntercept > 0 ? " - " : " + ") + Math.abs(yIntercept.toFixed(2)) + " = 0";
+            else
+                gl.lineStand2.innerHTML = "y = 0";
+        }
+    }
+    else
+    {
+        gl.lineSlope2.innerHTML = "x = " + gl.q1.x.toFixed(2);
+        if(gl.q1.x != 0)
+            gl.lineStand2.innerHTML = "x" + (gl.q1.x > 0 ? " - " : " + ") + Math.abs(gl.q1.x.toFixed(2)) + " = 0";
+        else
+            gl.lineStand2.innerHTML = "x = 0";
+    }
+
+    // find interection point
+    if(gl.line1.isIntersected(gl.line2))
+    {
+        gl.intersectPoint = gl.line1.intersect(gl.line2);
+        gl.intersect.innerHTML = "(" + gl.intersectPoint.x.toFixed(3) + ", " + gl.intersectPoint.y.toFixed(3) + ")";
+    }
+    else
+    {
+        gl.intersectPoint = undefined;
+        gl.intersect.innerHTML = "undefined";
+    }
+
+    frame(gl);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function resetPoints(gl)
+{
+    gl.p1.x = P1_X;
+    document.getElementById("rangeP1x").value = P1_X;
+    document.getElementById("labelP1x").innerHTML = P1_X;
+    gl.p1.y = P1_Y;
+    document.getElementById("rangeP1y").value = P1_Y;
+    document.getElementById("labelP1y").innerHTML = P1_Y;
+
+    gl.p2.x = P2_X;
+    document.getElementById("rangeP2x").value = P2_X;
+    document.getElementById("labelP2x").innerHTML = P2_X;
+    gl.p2.y = P2_Y;
+    document.getElementById("rangeP2y").value = P2_Y;
+    document.getElementById("labelP2y").innerHTML = P2_Y;
+
+    gl.q1.x = Q1_X;
+    document.getElementById("rangeQ1x").value = Q1_X;
+    document.getElementById("labelQ1x").innerHTML = Q1_X;
+    gl.q1.y = Q1_Y;
+    document.getElementById("rangeQ1y").value = Q1_Y;
+    document.getElementById("labelQ1y").innerHTML = Q1_Y;
+
+    gl.q2.x = Q2_X;
+    document.getElementById("rangeQ2x").value = Q2_X;
+    document.getElementById("labelQ2x").innerHTML = Q2_X;
+    gl.q2.y = Q2_Y;
+    document.getElementById("rangeQ2y").value = Q2_Y;
+    document.getElementById("labelQ2y").innerHTML = Q2_Y;
+
+    update(gl);
+}
+
+
+
+// ]]>
+</script>
+
+</head>
+
+<body>
+
+<div class="contentblock">
+<h2>Intersection of 2 Lines in 2D</h2>
+
+<div class="leftblock">
+<canvas id="webglview1">
+</canvas>
+</div>
+
+<div class="rightblock">
+<fieldset class="slidergroup">
+<legend>Line 1</legend>
+<div class="col1">
+<div>P1</div>
+<span class="col2">x:</span><input type="range" id="rangeP1x" min="-10" max="10" step="0.1" value="0"><label id="labelP1x" class="col3">0</label>
+<br>
+<span class="col2">y:</span><input type="range" id="rangeP1y" min="-10" max="10" step="0.1" value="0"><label id="labelP1y" class="col3">0</label>
+</div>
+<div class="col1">
+<div>P2</div>
+<span class="col2">x:</span><input type="range" id="rangeP2x" min="-10" max="10" step="0.1" value="0"><label id="labelP2x" class="col3">0</label>
+<br>
+<span class="col2">y:</span><input type="range" id="rangeP2y" min="-10" max="10" step="0.1" value="0"><label id="labelP2y" class="col3">0</label>
+</div>
+<div class="clear">
+</div>
+<div class="equation">
+<span class="col4">Parametric Form:</span> <span id="param1">p + tv</span>
+<br>
+<span class="col4">Slope-Intercept Form:</span> <span id="slope1">y = mx + b</span>
+<br>
+<span class="col4">Standard Form:</span> <span id="stand1">ax + by + c = 0</span>
+</div>
+</fieldset>
+
+<fieldset class="slidergroup">
+<legend>Line 2</legend>
+<div class="col1">
+<div>Q1</div>
+<span class="col2">x:</span><input type="range" id="rangeQ1x" min="-10" max="10" step="0.1" value="0"><label id="labelQ1x" class="col3">0</label>
+<br>
+<span class="col2">y:</span><input type="range" id="rangeQ1y" min="-10" max="10" step="0.1" value="0"><label id="labelQ1y" class="col3">0</label>
+</div>
+<div class="col1">
+<div>Q2</div>
+<span class="col2">x:</span><input type="range" id="rangeQ2x" min="-10" max="10" step="0.1" value="0"><label id="labelQ2x" class="col3">0</label>
+<br>
+<span class="col2">y:</span><input type="range" id="rangeQ2y" min="-10" max="10" step="0.1" value="0"><label id="labelQ2y" class="col3">0</label>
+</div>
+<div class="clear">
+</div>
+<div class="equation">
+<span class="col4">Parametric Form:</span> <span id="param2">p + tv</span>
+<br>
+<span class="col4">Slope-Intercept Form:</span> <span id="slope2">y = mx + b</span>
+<br>
+<span class="col4">Standard Form:</span> <span id="stand2">ax + by + c = 0</span>
+</div>
+</fieldset>
+
+<fieldset class="slidergroup">
+<legend>Intersection Point</legend>
+<span id="intersect">undefined</span>
+</fieldset>
+
+<button type="reset" id="resetPoints">Reset Points</button>
+
+</div>
+
+<div class="clear">
+</div>
+
+
+</div> <!-- end of contentblock -->
+
+</body>
+</html>

@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- ==========================================================================
+testing intersection of 2 planes
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2017-06-28
+UPDATED: 2017-07-07
+===============================================================================
+-->
+
+<head>
+<title>Plane Intersection</title>
+<meta charset="utf-8" />
+<meta name="generator" content="editplus" />
+<meta name="author" content="Song Ho Ahn" />
+<meta name="keywords" content="" />
+<meta name="description" content="" />
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    font-size:12px;
+}
+p {
+    margin:0 0 1em 0;
+}
+input[type=range] {
+    vertical-align:middle;
+}
+.contentblock {
+    position:relative;
+    margin:10px;
+}
+.leftblock {
+    float:left;
+    width:500px;
+    height:500px;
+    margin-bottom:1em;
+    border:1px solid #aaa;
+}
+.rightblock {
+    float:left;
+    margin-left:10px;
+}
+.clear {
+    clear:both;
+}
+.slidergroup {
+    border:1px solid #aaa;
+    margin-bottom:1em;
+}
+.col1 {
+    display:inline-block;
+    width:1em;
+}
+.col2 {
+    display:inline-block;
+    width:20em;
+    text-align:right;
+}
+.col3 {
+    display:inline-block;
+    width:2em;
+    text-align:left;
+}
+#planeEq1, #planeEq2 {
+    font-family:"Times New Roman", Times, serif;
+    font-size:16px;
+}
+#webglview1 {
+    width:100%;
+    height:100%;
+}
+</style>
+
+
+
+<!-- JavaScript -->
+<script type="text/javascript"src="files/js/Logger.js"></script>
+<script type="text/javascript" src="files/js/Vectors.js"></script>
+<script type="text/javascript" src="files/js/Line.js"></script>
+<script type="text/javascript" src="files/js/Plane.js"></script>
+<script type="text/javascript" src="files/js/Matrices.js"></script>
+<script type="text/javascript" src="files/js/Light.js"></script>
+<script type="text/javascript" src="files/js/Material.js"></script>
+<script type="text/javascript" src="files/js/ObjModel.js"></script>
+<script type="text/javascript" src="files/js/webglUtils.js"></script>
+
+
+<script type="text/javascript">
+// <![CDATA[
+
+var gl = null;
+var GLSL_PATH = "files/glsl/";
+var MODEL_PATH = "files/models/obj/";
+//var MODEL_PATH = "files/models/";
+var SCREEN_WIDTH = 500;     // px
+var SCREEN_HEIGHT = 500;    // px
+var POINT_SIZE = 15;
+var CAMERA_DIST = 25;
+var CAMERA_ANGLE_X = 45;
+var CAMERA_ANGLE_Y = -45;
+var Z_NEAR = 1;
+var Z_FAR = 1000;
+var FOV_V = 60;
+var DEG2RAD = Math.PI / 180;
+var A1 = 2;
+var B1 = 3;
+var C1 = 1;
+var D1 = 3;
+var A2 = -1;
+var B2 = 1;
+var C2 = 1;
+var D2 = 2;
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// main entry point
+document.addEventListener("DOMContentLoaded", function(e)
+{
+    Logger.open();
+
+    initWebGL("webglview1");
+    if(!gl)
+        return;
+
+    initPage(gl);
+    updateCamera(gl);
+    frame(gl);
+});
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function initPage(gl)
+{
+    var rangeA1 = document.getElementById("rangeA1");
+    rangeA1.value = A1;
+    rangeA1.oninput = function()
+    {
+        document.getElementById("labelA1").innerHTML = rangeA1.value;
+        gl.a1 = parseFloat(rangeA1.value);
+        update(gl);
+    };
+    document.getElementById("labelA1").innerHTML = rangeA1.value;
+
+    var rangeB1 = document.getElementById("rangeB1");
+    rangeB1.value = B1;
+    rangeB1.oninput = function()
+    {
+        document.getElementById("labelB1").innerHTML = rangeB1.value;
+        gl.b1 = parseFloat(rangeB1.value);
+        update(gl);
+    };
+    document.getElementById("labelB1").innerHTML = rangeB1.value;
+
+    var rangeC1 = document.getElementById("rangeC1");
+    rangeC1.value = C1;
+    rangeC1.oninput = function()
+    {
+        document.getElementById("labelC1").innerHTML = rangeC1.value;
+        gl.c1 = parseFloat(rangeC1.value);
+        update(gl);
+    };
+    document.getElementById("labelC1").innerHTML = rangeC1.value;
+
+    var rangeD1 = document.getElementById("rangeD1");
+    rangeD1.value = D1;
+    rangeD1.oninput = function()
+    {
+        document.getElementById("labelD1").innerHTML = rangeD1.value;
+        gl.d1 = parseFloat(rangeD1.value);
+        update(gl);
+    };
+    document.getElementById("labelD1").innerHTML = rangeD1.value;
+
+    var rangeA2 = document.getElementById("rangeA2");
+    rangeA2.value = A2;
+    rangeA2.oninput = function()
+    {
+        document.getElementById("labelA2").innerHTML = rangeA2.value;
+        gl.a2 = parseFloat(rangeA2.value);
+        update(gl);
+    };
+    document.getElementById("labelA2").innerHTML = rangeA2.value;
+
+    var rangeB2 = document.getElementById("rangeB2");
+    rangeB2.value = B2;
+    rangeB2.oninput = function()
+    {
+        document.getElementById("labelB2").innerHTML = rangeB2.value;
+        gl.b2 = parseFloat(rangeB2.value);
+        update(gl);
+    };
+    document.getElementById("labelB2").innerHTML = rangeB2.value;
+
+    var rangeC2 = document.getElementById("rangeC2");
+    rangeC2.value = C2;
+    rangeC2.oninput = function()
+    {
+        document.getElementById("labelC2").innerHTML = rangeC2.value;
+        gl.c2 = parseFloat(rangeC2.value);
+        update(gl);
+    };
+    document.getElementById("labelC2").innerHTML = rangeC2.value;
+
+    var rangeD2 = document.getElementById("rangeD2");
+    rangeD2.value = D2;
+    rangeD2.oninput = function()
+    {
+        document.getElementById("labelD2").innerHTML = rangeD2.value;
+        gl.d2 = parseFloat(rangeD2.value);
+        update(gl);
+    };
+    document.getElementById("labelD2").innerHTML = rangeD2.value;
+
+    var buttonReset = document.getElementById("buttonReset");
+    buttonReset.onclick = function()
+    {
+        resetPlanes(gl);
+    };
+
+    gl.planeEq1 = document.getElementById("planeEq1");
+    gl.planeEq2 = document.getElementById("planeEq2");
+    gl.intersect = document.getElementById("intersect");
+
+    update(gl);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function initWebGL(canvasId)
+{
+    try{
+
+    var canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        var parentNode = canvas.parentNode;
+        var message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        parentNode.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                               message +
+                               "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // resize canvas window to fit in the parent
+    canvas.width = canvas.parentNode.clientWidth;
+    canvas.height = canvas.parentNode.clientHeight;
+    //log(canvas.width + ", " + canvas.height);
+
+    // get context
+    gl = getContextGL(canvas);
+    if(!gl)
+    {
+        //log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // remember the canvas
+    gl.canvas = canvas;
+
+    initGL(gl);
+    initGLSL(gl);
+    log("WebGL is initialized.\n");
+
+    // register event handlers
+    registerEventHandlers(gl);
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+        return false;
+    }
+
+    return gl;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame(gl)
+{
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    drawRoom(gl);
+    drawPlanes(gl);
+    drawLine(gl);   // intersect line
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+function drawRoom(gl)
+{
+    // set active program
+    gl.program = gl.shaderPrograms["flat"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    // matrix
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+
+    var color = new Float32Array([0.8, 0.8, 0.8, 1]);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, color);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboLine);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+    var matrix = new Matrix4();
+    for(var i = -10; i <= 10; ++i)
+    {
+        matrix.identity();
+        matrix.translate(i, 0, -10);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        matrix.rotateY(90 * DEG2RAD);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        matrix.rotateY(90 * DEG2RAD);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        matrix.rotateY(90 * DEG2RAD);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        matrix.identity();
+        matrix.translate(i, 0, -10);
+        matrix.rotateX(90 * DEG2RAD);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        matrix.rotateX(180 * DEG2RAD);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        matrix.identity();
+        matrix.translate(i, 0, -10);
+        matrix.rotateZ(90 * DEG2RAD);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        matrix.rotateY(90 * DEG2RAD);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        matrix.rotateY(90 * DEG2RAD);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        matrix.rotateY(90 * DEG2RAD);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        matrix.identity();
+        matrix.translate(i, 0, -10);
+        matrix.rotateZ(90 * DEG2RAD);
+        matrix.rotateX(90 * DEG2RAD);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        matrix.rotateX(180 * DEG2RAD);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+
+    // center grid
+    var color2 = new Float32Array([0.3, 0.3, 0.3, 1.0]);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, color2);
+    matrix.identity();
+    matrix.translate(0, 0, -10);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    matrix.rotateX(90 * DEG2RAD);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    matrix.rotateX(90 * DEG2RAD);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    matrix.rotateX(90 * DEG2RAD);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    matrix.identity();
+    matrix.translate(0, 0, -10);
+    matrix.rotateY(90 * DEG2RAD);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    matrix.rotateY(180 * DEG2RAD);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    matrix.identity();
+    matrix.translate(0, 0, -10);
+    matrix.rotateZ(90 * DEG2RAD);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    matrix.rotateY(90 * DEG2RAD);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    matrix.rotateY(90 * DEG2RAD);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    matrix.rotateY(90 * DEG2RAD);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    matrix.identity();
+    matrix.translate(0, 0, -10);
+    matrix.rotateZ(90 * DEG2RAD);
+    matrix.rotateX(90 * DEG2RAD);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    matrix.rotateX(180 * DEG2RAD);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    if(gl.vboCylinder)
+    {
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboCylinder);
+        gl.vertexAttribPointer(gl.program.attributePosition, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.iboCylinder);
+
+        matrix.identity();
+        matrix.scale(0.05, 5, 0.05);
+        matrix.translate(0, 5, 0);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([0, 1, 0, 1]));
+        gl.drawElements(gl.TRIANGLES, gl.iboCylinder.indexCount, gl.UNSIGNED_SHORT, 0);
+
+        matrix.rotateZ(-90 * DEG2RAD);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([1, 0, 0, 1]));
+        gl.drawElements(gl.TRIANGLES, gl.iboCylinder.indexCount, gl.UNSIGNED_SHORT, 0);
+
+        matrix.rotateY(-90 * DEG2RAD);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+        gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([0, 0, 1, 1]));
+        gl.drawElements(gl.TRIANGLES, gl.iboCylinder.indexCount, gl.UNSIGNED_SHORT, 0);
+    }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+function drawPlanes(gl)
+{
+    // set active program
+    gl.program = gl.shaderPrograms["phong"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    gl.disable(gl.CULL_FACE);
+
+    // pass light
+    gl.uniform4fv(gl.program.uniform.lightColor, gl.light.getColor());
+    gl.uniform3fv(gl.program.uniform.lightAttenuations, gl.light.getAttenuations());
+    gl.uniform4fv(gl.program.uniform.lightPosition, gl.light.position.toFloat32Array());
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboPlane);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, gl.vboPlane.normalOffset);
+
+    // plane #1
+    var n = gl.plane1.normal.clone();
+    n.normalize();
+    var d = gl.plane1.getDistance();
+    var t = n.scale(d);
+    var matrix = new Matrix4();
+    matrix.lookAt(gl.a1, gl.b1, gl.c1);
+    matrix.translate(t.x, t.y, t.z);
+    gl.matrixModelView = gl.matrixView.clone().multiply(matrix);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+
+    gl.matrixNormal = gl.matrixModelView.clone();
+    gl.matrixNormal.setTranslation(0,0,0); // remove tranlsation part
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    // pass material
+    gl.uniform4fv(gl.program.uniform.materialAmbient, gl.material1.getAmbient());
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material1.getDiffuse());
+    gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material1.getSpecular());
+    gl.uniform1f(gl.program.uniform.materialShininess, gl.material1.shininess);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    // plane #2
+    //gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([0.8, 0.8, 1.0, 1]));
+    n = gl.plane2.normal.clone();
+    n.normalize();
+    d = gl.plane2.getDistance();
+    t = n.scale(d);
+    matrix.identity();
+    matrix.lookAt(gl.a2, gl.b2, gl.c2);
+    matrix.translate(t.x, t.y, t.z);
+    gl.matrixModelView = gl.matrixView.clone().multiply(matrix);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+
+    gl.matrixNormal = gl.matrixModelView.clone();
+    gl.matrixNormal.setTranslation(0,0,0); // remove tranlsation part
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    // pass material
+    gl.uniform4fv(gl.program.uniform.materialAmbient, gl.material2.getAmbient());
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material2.getDiffuse());
+    gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material2.getSpecular());
+    gl.uniform1f(gl.program.uniform.materialShininess, gl.material2.shininess);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function drawLine(gl)
+{
+    if(!gl.vboCylinder)
+        return;
+
+    if(!gl.intersectLine)
+        return;
+
+    // set active program
+    gl.program = gl.shaderPrograms["flat"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    // matrix
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+
+    var color = new Float32Array([1.0, 0.5, 0.0, 1]);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, color);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboCylinder);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.iboCylinder);
+
+    // compute transform
+    var v = gl.intersectLine.direction;
+    var p = gl.intersectLine.point;
+
+    // compute lookat rotation matrix
+    var m1 = new Matrix4();
+    m1.lookAt(v.x, v.y, v.z);
+
+    var m2 = new Matrix4();
+    m2.scale(0.2, 20, 0.2);
+    m2.rotateX(90 * DEG2RAD);
+
+    var matrix = m1.multiply(m2);
+    matrix.translate(p.x, p.y, p.z);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrix.m);
+    //gl.uniform1i(gl.program.uniform.matrixComputed, false);
+
+    gl.drawElements(gl.TRIANGLES, gl.iboCylinder.indexCount, gl.UNSIGNED_SHORT, 0);
+}
+
+
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// register event handlers to canvas
+///////////////////////////////////////////////////////////////////////////////
+function registerEventHandlers(gl)
+{
+    // register event handlers
+    window.addEventListener("resize",  function(){handleResize(gl);}, false);
+    log("Added window resize event listener, handleResize().");
+
+    gl.canvas.addEventListener("mousemove", handleMouseMove, false);
+    log("Added canvas mousemove event listener, handleMouseMove().");
+
+    gl.canvas.addEventListener("mousedown", handleMouseDown, false);
+    log("Added canvas mousedown event listener, handleMouseDown().");
+
+    gl.canvas.addEventListener("mouseup", handleMouseUp, false);
+    log("Added canvas mouseup event listener, handleMouseUp().");
+
+    gl.canvas.addEventListener("contextmenu", handleContextMenu, false);
+    log("Added canvas contextmenu event listener, handleContextMenu().");
+
+    gl.canvas.addEventListener("mousewheel", handleMouseWheel, false);
+    gl.canvas.addEventListener("DOMMouseScroll", handleMouseWheel, false);
+    log("Added canvas mousewheel event listeners, handleMouseWheel()");
+
+    // canvas touch events
+    gl.canvas.addEventListener("touchstart", handleTouchStart, false);
+    gl.canvas.addEventListener("touchmove", handleTouchMove, false);
+    gl.canvas.addEventListener("touchend", handleTouchEnd, false);
+    gl.canvas.addEventListener("touchcancel", handleTouchCancel, false);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the window is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize(gl)
+{
+    // get the client dimension of whole window
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+
+    // reset viewport and projection matrix
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(FOV_V, gl.canvas.width/gl.canvas.height, Z_NEAR, Z_FAR);
+
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handlers for mouse event
+///////////////////////////////////////////////////////////////////////////////
+function handleMouseMove(e)
+{
+    var SCALE_ANGLE = 0.2;
+    var DEG2RAD = Math.PI / 180;
+
+    // get current mouse position
+    var offset = getElementOffset(this);
+    var mouseX = e.clientX - offset.x;
+    var mouseY = e.clientY - offset.y;
+    //log("mouse:" + mouseX + ", " + mouseY);
+
+    // rotate camera
+    if(gl.mouse.leftDown)
+    {
+        gl.camera.angle.y += (mouseX - gl.mouse.x);
+        gl.camera.angle.x += (mouseY - gl.mouse.y);
+        gl.mouse.x = mouseX;
+        gl.mouse.y = mouseY;
+        updateCamera(gl);
+        frame(gl);
+    }
+
+    // zoom camera
+    if(gl.mouse.rightDown)
+    {
+        gl.camera.distance -= (mouseY - gl.mouse.y) * 0.2;
+        gl.mouse.y = mouseY;
+        updateCamera(gl);
+        frame(gl);
+    }
+    //log(gl.mouse.toString());
+}
+
+function handleMouseWheel(e)
+{
+    var ZOOM_SCALE = 1;
+
+    var delta = 0;
+    if("wheelDelta" in e)
+    {
+        delta = e.wheelDelta / 120;
+    }
+    else // firefox
+    {
+        // firefox has different delta and scale.
+        delta = -e.detail / 3;
+    }
+
+    // positive delta = scroll up
+    // negative delta = scroll down
+    if(delta != 0)
+    {
+        var deltaDistance = delta * ZOOM_SCALE;
+        if((gl.camera.distance - deltaDistance) < gl.nearPlane)
+            deltaDistance = gl.camera.distance - gl.nearPlane;
+        else if((gl.camera.distance - deltaDistance) > gl.farPlane)
+            deltaDistance = gl.camera.distance - gl.farPlane;
+
+        gl.camera.distance -= deltaDistance;
+        updateCamera(gl);
+        frame(gl);
+    }
+
+    e.preventDefault();
+}
+
+function handleMouseDown(e)
+{
+    // remember mouse position when mouse down
+    var offset = getElementOffset(this);
+    gl.mouse.x = e.clientX - offset.x;
+    gl.mouse.y = e.clientY - offset.y;
+    //log("down: " + gl.mouse.x + ", " + gl.mouse.y);
+
+    //e = e || window.event; // hack for IE
+    if("which" in e)
+    {
+        switch(e.which)
+        {
+            case 1: gl.mouse.leftDown = true;   break;
+            case 2: gl.mouse.middleDown = true; break;
+            case 3: gl.mouse.rightDown = true;  break;
+        }
+    }
+    else if("button" in e) // for IE
+    {
+        if(e.button & 1) gl.mouse.leftDown = true;
+        if(e.button & 2) gl.mouse.rightDown = true;
+        if(e.button & 4) gl.mouse.middleDown = true;
+    }
+
+    e.preventDefault(); // disable context menu
+}
+
+function handleMouseUp(e)
+{
+    //e = e || window.event; // hack for IE
+    if("which" in e)
+    {
+        switch(e.which)
+        {
+            case 1: gl.mouse.leftDown = false;      break;
+            case 2: gl.mouse.middleDown = false;    break;
+            case 3: gl.mouse.rightDown = false;     break;
+        }
+    }
+    else if("button" in e) // for IE
+    {
+        if(e.button & 1) gl.mouse.leftDown = false;
+        if(e.button & 2) gl.mouse.rightDown = false;
+        if(e.button & 4) gl.mouse.middleDown = false;
+    }
+}
+
+function handleContextMenu(e)
+{
+    e.preventDefault(); // disable context menu
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handle touch events
+///////////////////////////////////////////////////////////////////////////////
+function handleTouchStart(e)
+{
+    e.preventDefault(); // prevent mouse event being delivered
+
+    var touches = e.changedTouches;
+    for(var i = 0; i < touches.length; ++i)
+    {
+        gl.touches.push(copyTouch(touches[i]));
+        gl.touches.distance = 0;
+        //log("Touch started:" + findTouchIndex(touches[i]));
+    }
+}
+
+function handleTouchEnd(e)
+{
+    e.preventDefault();
+    // remove all touches
+    gl.touches.length = 0;
+    /*
+    var touches = e.changedTouches;
+    for(var i = 0; i < touches.length; ++i)
+    {
+        var index = findTouchIndex(gl, touches[i]);
+        if(index >= 0) // found
+        {
+            gl.touches.splice(index, 1);    // remove
+        }
+    }
+    */
+}
+
+function handleTouchMove(e)
+{
+    e.preventDefault();
+    var touches = e.changedTouches;
+    var touch1, touch2; // current touches
+
+    for(var i = 0; i < touches.length; ++i)
+    {
+        //log("Touch Moved:" + findTouchIndex(touches[i]));
+        var index = findTouchIndex(touches[i]);
+        if(index == 0)
+            touch1 = touches[i];
+        else if(index == 1)
+            touch2 = touches[i];
+    }
+
+    if(gl.touches.length == 1)
+    {
+        gl.camera.angle.y += (touch1.pageX - gl.touches[0].pageX) * 0.2;
+        gl.camera.angle.x += (touch1.pageY - gl.touches[0].pageY) * 0.2;
+
+        // update touch position
+        gl.touches[0].pageX = touch1.pageX;
+        gl.touches[0].pageY = touch1.pageY;
+
+        updateCamera(gl);
+        frame(gl);
+    }
+    else if(gl.touches.length == 2)
+    {
+        // zoom camera
+        var v = new Vector2(touch2.pageX - touch1.pageX, touch2.pageY - touch1.pageY);
+        var dist = v.length();
+        var delta = 0;
+        if(gl.touches.distance > 0)
+            delta = -0.1 * (dist - gl.touches.distance);
+        
+        gl.camera.distance += delta;
+        gl.touches.distance = dist;     // remember
+
+        updateCamera(gl);
+        frame(gl);
+    }
+}
+
+function handleTouchCancel(e)
+{
+    gl.touches.length = 0;
+    //log("Touch canceled.");
+}
+
+function handleTouchLeave(e)
+{
+    gl.touches.length = 0;
+    //log("Touch left.");
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function copyTouch(touch)
+{
+    return {identifier:touch.identifier, pageX:touch.pageX, pageY:touch.pageY};
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function findTouchIndex(touch)
+{
+    for(var i = 0; i < gl.touches.length; ++i)
+    {
+        if(touch.identifier == gl.touches[i].identifier)
+            return i;
+    }
+    return -1;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL(gl)
+{
+    gl.clearColor(1.0, 1.0, 1.0, 1.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);   // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+    gl.cullFace(gl.BACK);
+    gl.enable(gl.BLEND);        // enable blend
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    //gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+    gl.a1 = A1;
+    gl.b1 = B1;
+    gl.c1 = C1;
+    gl.d1 = D1;
+    gl.a2 = A2;
+    gl.b2 = B2;
+    gl.c2 = C2;
+    gl.d2 = D2;
+    gl.intersectLine = undefined;
+
+    // init plane equations
+    gl.plane1 = new Plane(gl.a1, gl.b1, gl.c1, gl.d1);
+    gl.plane2 = new Plane(gl.a2, gl.b2, gl.c2, gl.d2);
+
+    // init models
+    gl.cylinder = new ObjModel();
+    gl.cylinder.read(MODEL_PATH + "cylinder.obj").then(objLoaded);
+    initVBOs(gl);
+
+    // init default light
+    gl.light = new Light(0, 0, 1, 0);
+    gl.light.color.set(1, 1, 0.8, 1); // (r,g,b,a)
+    log(gl.light);
+
+    // init material
+    gl.material1 = new Material(0.5, 0.6, 0.5, 1.0); // with diffuse
+    gl.material1.ambient.set(0.4, 0.5, 0.4, 1.0);
+    gl.material1.specular.set(0.1, 0.2, 0.1, 1);
+    gl.material1.shininess = 32;
+    log(gl.material1);
+    gl.material2 = new Material(0.5, 0.5, 0.6, 1.0); // with diffuse
+    gl.material2.ambient.set(0.4, 0.4, 0.5, 1.0);
+    gl.material2.specular.set(0.1, 0.1, 0.2, 1);
+    gl.material2.shininess = 32;
+    log(gl.material2);
+
+    // init matrices
+    handleResize(gl);
+    gl.matrixModel = new Matrix4();
+    gl.matrixView = new Matrix4();
+    gl.matrixModelView = new Matrix4();
+    gl.matrixModelViewProjection = new Matrix4();
+    gl.matrixNormal = new Matrix4();
+
+    // init camera
+    gl.camera = {};
+    gl.camera.angle = new Vector3(CAMERA_ANGLE_X, CAMERA_ANGLE_Y, 0);
+    gl.camera.distance = CAMERA_DIST;
+
+    // init mouse interaction
+    gl.mouse = {};
+    gl.mouse.x = 0;
+    gl.mouse.y = 0;
+
+    // init touch states
+    gl.touches = [];
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL(gl)
+{
+    initVertexAttribArrays(gl);
+
+    // load shaders
+    gl.shaderPrograms = {}; // associative array
+
+    // load flat shader
+    createShaderProgram(gl, GLSL_PATH+"gles_flat.vert", GLSL_PATH+"gles_flat.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        //gl.uniform4fv(program.uniform.materialDiffuse, new Float32Array([1,1,1,1]));
+        gl.uniform1i(program.uniform.matrixComputed, false);
+
+        gl.shaderPrograms["flat"] = program;
+        frame(gl);
+    });
+
+    // load phong shader
+    createShaderProgram(gl, GLSL_PATH+"gles_phong.vert", GLSL_PATH+"gles_phong.frag").then(program =>
+    {
+        gl.useProgram(program);
+        gl.shaderPrograms["phong"] = program;
+        frame(gl);
+    });
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function initVBOs(gl)
+{
+    var s = 10;     // length
+    var d = 0.05;   // delta
+    var lineVertices = new Float32Array([-d,-s, 0,   d,-s, 0,   d, s, 0,   d, s, 0,  -d, s, 0,  -d,-s, 0]);
+    gl.vboLine = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboLine);
+    gl.bufferData(gl.ARRAY_BUFFER, lineVertices, gl.STATIC_DRAW);
+
+    var planeVertices = new Float32Array([-s,-s, 0,   s,-s, 0,   s, s, 0,   s, s, 0,  -s, s, 0,  -s,-s, 0]);
+    var planeNormals  = new Float32Array([ 0, 0, 1,   0, 0, 1,   0, 0, 1,   0, 0, 1,   0, 0, 1,   0, 0, 1]);
+    gl.vboPlane = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboPlane);
+    gl.bufferData(gl.ARRAY_BUFFER, planeVertices.byteLength + planeNormals.byteLength, gl.STATIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, planeVertices);
+    gl.bufferSubData(gl.ARRAY_BUFFER, planeVertices.byteLength, planeNormals);
+    gl.vboPlane.normalOffset = planeVertices.byteLength;
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function objLoaded(obj)
+{
+    log("Loaded OBJ:");
+    log(obj);
+
+    gl.vboCylinder = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboCylinder);
+    gl.bufferData(gl.ARRAY_BUFFER, obj.vertices.byteLength + obj.normals.byteLength, gl.STATIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, obj.vertices);
+    gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength, obj.normals);
+    gl.vboCylinder.normalOffset = obj.vertices.byteLength;
+
+    gl.iboCylinder = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.iboCylinder);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, obj.indices, gl.STATIC_DRAW);
+    gl.iboCylinder.indexCount = obj.indices.length;
+
+    frame(gl);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+function update(gl)
+{
+    gl.plane1.set(gl.a1, gl.b1, gl.c1, gl.d1);
+    gl.plane2.set(gl.a2, gl.b2, gl.c2, gl.d2);
+
+    // plane equations
+    gl.planeEq1.innerHTML = gl.plane1.normal.x.toFixed(1) + "x + " + gl.plane1.normal.y.toFixed(1) + "y + " + gl.plane1.normal.z.toFixed(1) + "z + " + gl.plane1.d.toFixed(1) + " = 0";
+    gl.planeEq2.innerHTML = gl.plane2.normal.x.toFixed(1) + "x + " + gl.plane2.normal.y.toFixed(1) + "y + " + gl.plane2.normal.z.toFixed(1) + "z + " + gl.plane2.d.toFixed(1) + " = 0";
+
+    // find interection point
+    if(gl.plane1.isIntersected(gl.plane2))
+    {
+        gl.intersectLine = gl.plane1.intersect(gl.plane2);
+        gl.intersect.innerHTML = "(" + gl.intersectLine.point.x.toFixed(3) + ", " + gl.intersectLine.point.y.toFixed(3) + ", " + gl.intersectLine.point.z.toFixed(3) + ") + t" +
+                                 "(" + gl.intersectLine.direction.x.toFixed(1) + ", " + gl.intersectLine.direction.y.toFixed(1) + ", " + gl.intersectLine.direction.z.toFixed(1) + ")";
+    }
+    else
+    {
+        gl.intersectLine = undefined;
+        gl.intersect.innerHTML = "undefined";
+    }
+
+    frame(gl);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function updateCamera(gl)
+{
+    gl.matrixView.identity();
+    gl.matrixView.rotateY(gl.camera.angle.y * DEG2RAD);
+    gl.matrixView.rotateX(gl.camera.angle.x * DEG2RAD);
+    gl.matrixView.translate(0, 0, -gl.camera.distance);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function resetPlanes(gl)
+{
+    gl.a1 = A1;
+    document.getElementById("rangeA1").value = A1;
+    document.getElementById("labelA1").innerHTML = A1;
+    gl.b1 = B1;
+    document.getElementById("rangeB1").value = B1;
+    document.getElementById("labelB1").innerHTML = B1;
+    gl.c1 = C1;
+    document.getElementById("rangeC1").value = C1;
+    document.getElementById("labelC1").innerHTML = C1;
+    gl.d1 = D1;
+    document.getElementById("rangeD1").value = D1;
+    document.getElementById("labelD1").innerHTML = D1;
+
+    gl.a2 = A2;
+    document.getElementById("rangeA2").value = A2;
+    document.getElementById("labelA2").innerHTML = A2;
+    gl.b2 = B2;
+    document.getElementById("rangeB2").value = B2;
+    document.getElementById("labelB2").innerHTML = B2;
+    gl.c2 = C2;
+    document.getElementById("rangeC2").value = C2;
+    document.getElementById("labelC2").innerHTML = C2;
+    gl.d2 = D2;
+    document.getElementById("rangeD2").value = D2;
+    document.getElementById("labelD2").innerHTML = D2;
+
+    update(gl);
+}
+
+
+
+// ]]>
+</script>
+
+</head>
+
+<body>
+
+<div class="contentblock">
+<h2>Intersection of 2 Planes</h2>
+
+<div class="leftblock">
+<canvas id="webglview1">
+</canvas>
+</div>
+
+<div class="rightblock">
+<fieldset class="slidergroup">
+<legend>Plane 1</legend>
+<span id="planeEq1">ax + by + cz + d = 0</span>
+<br>
+<span class="col1">a:</span><input class="col2" type="range" id="rangeA1" min="-10" max="10" step="0.1" value="0"><label id="labelA1" class="col3">0</label>
+<br>
+<span class="col1">b:</span><input class="col2" type="range" id="rangeB1" min="-10" max="10" step="0.1" value="0"><label id="labelB1" class="col3">0</label>
+<br>
+<span class="col1">c:</span><input class="col2" type="range" id="rangeC1" min="-10" max="10" step="0.1" value="0"><label id="labelC1" class="col3">0</label>
+<br>
+<span class="col1">d:</span><input class="col2" type="range" id="rangeD1" min="-10" max="10" step="0.1" value="0"><label id="labelD1" class="col3">0</label>
+</fieldset>
+
+<fieldset class="slidergroup">
+<legend>Plane 2</legend>
+<span id="planeEq2">ax + by + cz + d = 0</span>
+<br>
+<span class="col1">a:</span><input class="col2" type="range" id="rangeA2" min="-10" max="10" step="0.1" value="0"><label id="labelA2" class="col3">0</label>
+<br>
+<span class="col1">b:</span><input class="col2" type="range" id="rangeB2" min="-10" max="10" step="0.1" value="0"><label id="labelB2" class="col3">0</label>
+<br>
+<span class="col1">c:</span><input class="col2" type="range" id="rangeC2" min="-10" max="10" step="0.1" value="0"><label id="labelC2" class="col3">0</label>
+<br>
+<span class="col1">d:</span><input class="col2" type="range" id="rangeD2" min="-10" max="10" step="0.1" value="0"><label id="labelD2" class="col3">0</label>
+</fieldset>
+
+<fieldset class="slidergroup">
+<legend>Intersection Line</legend>
+<span id="intersect">undefined</span>
+</fieldset>
+
+
+<button type="reset" id="buttonReset">Reset Planes</button>
+
+</div>
+
+<div class="clear">
+</div>
+
+
+</div> <!-- end of contentblock -->
+
+</body>
+</html>

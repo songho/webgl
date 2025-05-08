@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html>
+
+<!-- ==========================================================================
+test for drawing edge lines
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2011-12-16
+UPDATED: 2014-08-25
+===============================================================================
+-->
+
+<head>
+<title>Drawing Edges</title>
+<meta name="generator" content="editplus" />
+<meta name="author" content="Song Ho Ahn" />
+<meta name="keywords" content="" />
+<meta name="description" content="" />
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    font-size:12px;
+}
+p {
+    margin:0 0 1em 0;
+}
+.contentblock {
+    position:absolute;
+    left:0px;
+    right:0px;
+    top:0px;
+    bottom:0px;
+}
+.centerblock {
+	position:absolute;
+	left:10px;
+	right:10px;
+	top:10px;
+	bottom:10px;
+    border:1px solid #f00;
+}
+
+</style>
+
+
+
+<!-- JavaScript -->
+<script type="text/javascript"src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script type="text/javascript" src="files/js/Vectors.js"></script>
+<script type="text/javascript" src="files/js/Matrices.js"></script>
+<script type="text/javascript" src="files/js/Quaternion.js"></script>
+<script type="text/javascript" src="files/js/Light.js"></script>
+<script type="text/javascript" src="files/js/Material.js"></script>
+<script type="text/javascript" src="files/js/Timer.js"></script>
+<script type="text/javascript" src="files/js/FrameRate.js"></script>
+<script type="text/javascript" src="files/js/MouseState.js"></script>
+<script type="text/javascript" src="files/js/Trackball.js"></script>
+<script type="text/javascript" src="files/js/ShaderManager.js"></script>
+<script type="text/javascript" src="files/js/ObjModel.js"></script>
+<script type="text/javascript" src="files/js/webglUtils.js"></script>
+<script type="text/javascript" src="files/js/Edge.js"></script>
+
+<!-- shader -->
+<script id="vert-simple" type="x-shader/x-vertex">
+// per-vertex lighting with a directional light source
+
+// vertex attributes
+attribute vec3 vertexPosition;
+attribute vec3 vertexNormal;
+attribute vec2 vertexUv;
+
+// uniforms
+uniform mat4 matrixNormal;
+uniform mat4 matrixView;
+uniform mat4 matrixModelView;
+uniform mat4 matrixModelViewProjection;
+uniform bool lightEnabled;
+uniform vec4 lightPosition;             // should be on the eye space
+uniform vec4 lightColor;
+uniform vec3 lightAttenuations;         // constant, linear, quadratic attanuations
+uniform vec4 materialAmbient;           // material ambient color
+uniform vec4 materialDiffuse;           // material diffuse color
+uniform vec4 materialSpecular;          // material specular color
+uniform float materialShininess;        // material specular exponent
+
+// varying variables
+varying vec4 ambient;
+varying vec4 diffuse;
+varying vec4 normalVec;
+varying vec3 lightVec;
+varying vec3 halfVec;
+varying float lightDistance;
+//@@varying vec2 texCoord;
+
+void main(void)
+{
+    // transform vertex position to clip space
+    gl_Position = matrixModelViewProjection * vec4(vertexPosition, 1);
+
+    if(!lightEnabled)
+    {
+        diffuse = materialDiffuse;
+        return;
+    }
+
+    ambient = materialAmbient;
+    diffuse = materialDiffuse * lightColor;
+
+    // directional
+    if(lightPosition.w == 0.0)
+    {
+        lightVec = lightPosition.xyz;   // assume lightPosition is normalized
+        lightDistance = -1.0;           // negative for directional
+    }
+    // positional
+    else
+    {
+        // transform vertex pos to eye space
+        vec4 eyeVertexVec = matrixModelView * vec4(vertexPosition, 1.0);
+
+        // compute light vector and distance for positional
+        lightVec = lightPosition.xyz - eyeVertexVec.xyz;
+        lightDistance = sqrt(dot(lightVec, lightVec));
+        lightVec = normalize(lightVec);
+    }
+
+    // transform the normal vector from object space to eye space
+    // assume vertexNormal was already normalized.
+    normalVec = matrixNormal * vec4(vertexNormal, 1.0);
+
+    // compute half vector
+    halfVec = normalize(lightVec + vec3(0,0,1));
+}
+</script>
+
+
+
+<script id="frag-simple" type="x-shader/x-fragment">
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+#else
+    precision mediump float;
+#endif
+
+// uniforms
+uniform bool lightEnabled;
+uniform vec4 lightColor;
+uniform vec3 lightAttenuations;         // constant, linear, quadratic attanuations
+uniform vec4 materialSpecular;          // material specular color
+uniform float materialShininess;        // material specular exponent
+
+// varying variables
+varying vec4 ambient;
+varying vec4 diffuse;
+varying vec4 normalVec;
+varying vec3 lightVec;
+varying vec3 halfVec;
+varying float lightDistance;
+//@@varying vec2 texCoord;
+
+void main(void)
+{
+    if(!lightEnabled)
+    {
+        //@@gl_FragColor = texture2D(map0, texCoord) * diffuse;
+        gl_FragColor = diffuse;
+        return;
+    }
+
+    // re-normalize varying vars and store them as local vars
+    vec3 normal = normalize(normalVec.xyz);
+    vec3 halfv = normalize(halfVec);
+    vec3 light = normalize(lightVec);
+
+    // compute attenuations for positional light
+    float dotNL = max(dot(normal, light), 0.0);
+    float dotNH = max(dot(normal, halfv), 0.0);
+    //float dotNH = dot(normal, halfv);
+
+    // compute attenuation factor: 1 / (k0 + k1 * d + k2 * (d*d))
+    /*
+    float attFactor = 1.0;
+    attFactor = 1.0 / (lightAttenuations[0] +
+                       lightAttenuations[1] * lightDistance +
+                       lightAttenuations[2] * lightDistance * lightDistance);
+    */
+
+    // start with ambient
+    vec3 color = ambient.xyz;
+
+    // add diffuse
+    color += dotNL * diffuse.xyz;
+
+    // apply texturing before specular
+    //@@vec4 texel = texture2D(map0, texCoord);
+    //@@color *= texel.rgb;     // modulate
+
+    // add specular
+    color += pow(dotNH, materialShininess) * materialSpecular.xyz * lightColor.xyz;
+
+    // add attenuation
+    //color *= attFactor;
+
+    //@@gl_FragColor = vec4(color.rgb, diffuse.a * texel.a);
+    gl_FragColor = vec4(color, diffuse.a);  // keep alpha as original material has
+
+    /*
+    if(attFactor > 0.0)
+    {
+        // add diffuse
+        color += dotNL * diffuse.xyz;
+
+        // apply texturing before specular
+        //@@vec4 texel = texture2D(map0, texCoord);
+        //@@color *= texel.rgb;     // modulate
+
+        // add specular
+        if(dotNH > 0.0)
+            color += pow(dotNH, materialShininess) * materialSpecular.xyz * lightColor.xyz;
+
+        // add attenuation
+        if(attFactor < 1.0)
+            color *= attFactor;
+
+        //@@gl_FragColor = vec4(color.rgb, diffuse.a * texel.a);
+        gl_FragColor = vec4(color, diffuse.a);  // keep alpha as original material has
+    }
+    */
+}
+</script>
+
+
+
+
+<script type="text/javascript">
+// <![CDATA[
+
+var gl = null;
+var vboVertex;  // vertex attributes
+var vboIndex;   // index attribute
+var vboHardEdge = null;
+var vboOutlineEdge = null;
+var CAMERA_Z = 300;
+var HOST_BASE = "127.0.0.1";
+
+window.onload = function(){
+    startWebGL("webglView");
+
+	// test loading
+	var obj = new ObjModel(gl);
+	obj.read("files/models/cube_tris.obj").then(obj => initVBOs(obj));
+	//obj.read("files/models/obj/torus_hard.obj", initVBOs);
+	//obj.read("files/models/obj/palmtree_deci50k.obj", initVBOs);
+	//obj.read("files/models/obj/dog_os_coxae_medium.obj", initVBOs);
+	//obj.read("files/models/obj/scapula.obj", initVBOs);
+
+    //loadFile(gl, "files/glsl/webgl_perFragmentLighting.frag");
+	//loadFile("files/glsl/webgl_perFragmentLighting.vertt");
+	//loadFile("files/models/obj/cube_tris.obj");
+	//loadFile("files/models/vbd/cube_tris.vbd");
+};
+
+
+
+
+// WebGL ======================================================================
+function startWebGL(canvasId)
+{
+    try{
+
+    //Logger.show();
+
+    var canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        var node = canvas.parentNode;
+        var message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        node.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                         message +
+                         "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return;
+    }
+
+    gl = getContextGL(canvas);
+    if(gl)
+    {
+        log("===== WebGL Info =====");
+        log(" Version: " + gl.getParameter(gl.VERSION));
+        log("GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+        log("  Vendor: " + gl.getParameter(gl.VENDOR));
+        log("Renderer: " + gl.getParameter(gl.RENDERER));
+        log();
+    }
+
+    // resize window to fit to parent
+    canvas.width = canvas.parentNode.clientWidth;
+    canvas.height = canvas.parentNode.clientHeight;
+    gl.canvas = canvas;
+
+    initGL(gl);
+    initGLSL();
+    log("WebGL is initialized.");
+
+    // init app ===============================================================
+    // init trackball
+    var radius = canvas.height * 0.2;
+    gl.trackball = new Trackball(radius, canvas.width, canvas.height);
+    log(gl.trackball);
+
+    // init camera quaternion
+    gl.camera = {};
+    gl.camera.position = new Vector3(0, 0, CAMERA_Z);
+    gl.camera.target = new Vector3(0, 0, 0);
+    gl.camera.quat = new Quaternion(1, 0, 0, 0);
+    gl.camera.deltaQuat = new Quaternion(1, 0, 0, 0);
+
+    // initial view matrix
+    gl.matrixView.identity();
+    gl.matrixView.translate(-gl.camera.position.x, -gl.camera.position.y, -gl.camera.position.z);
+
+    // add mouse state holder
+    gl.mouse = new MouseState();
+
+    // register event handlers
+    window.addEventListener("resize",  handleResize, false);
+    log("Added window resize envent listener, handleResize().");
+    canvas.addEventListener("mousemove", handleMouseMove, false);
+    log("Added canvas mousemove event listener, handleMouseMove().");
+    canvas.addEventListener("mousedown", handleMouseDown, false);
+    log("Added canvas mousedown event listener, handleMouseDown().");
+    canvas.addEventListener("mouseup", handleMouseUp, false);
+    log("Added canvas mouseup event listener, handleMouseUp().");
+    canvas.addEventListener("click", handleClick, false);
+    log("Added canvas click event listener, handleClick().");
+    canvas.addEventListener("mouseout", handleMouseOut, false);
+    log("Added canvas mouseout event listener, handleMouseOut().");
+    canvas.addEventListener("contextmenu", handleContextMenu, false);
+    log("Added canvas contextmenu event listener, handleContextMenu().");
+
+    // try to find "requestAnimationFrame" function
+    // if it is not available use setTimeout() instead
+    var requestAnimationFrame = getRequestAnimationFrameFunction(window);
+
+    // prepare rendering loop
+    log("\nStarting rendering loop...\n");
+
+    var timer = new Timer();
+    var fps = new FrameRate("framerate");
+    var frameCallback = function()
+    {
+        fps.tick();
+        gl.frameTime = timer.getFrameTime(); // get elapsed time as ms
+        gl.runTime += gl.frameTime;
+        frame();
+        postFrame();
+        requestAnimationFrame(frameCallback);
+    };
+
+    // start rendering loop
+    timer.start();
+    gl.runTime = 0;
+    requestAnimationFrame(frameCallback);
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+    }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // view transform
+    //gl.camera.quat = gl.camera.deltaQuat.multiply(gl.camera.quat);
+    //gl.camera.quat.normalize();
+    //gl.matrixView.identity();
+    //gl.matrixView.translate(-gl.camera.position.x, -gl.camera.position.y, -gl.camera.position.z);
+    //gl.matrixView.multiply(gl.camera.quat.toMatrix());
+    //gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+    gl.uniformMatrix4fv(gl.program.uniformMatrixView, false, gl.matrixView.m);
+
+    // model transform
+    //var angle = gl.runTime * 0.0005;
+    gl.matrixModel.identity();
+
+    //gl.matrixModelView.rotateX(45);
+    //gl.matrixModelView.rotateY(-45);
+
+    // compute modelview transform
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniformMatrixModelView, false, gl.matrixModelView.m);
+
+
+    // compute normal transform
+    gl.matrixNormal = gl.matrixModelView.clone().invert().transpose();
+    gl.uniformMatrix4fv(gl.program.uniformMatrixNormal, false, gl.matrixNormal.m);
+
+    // compute modelviewprojection transform
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniformMatrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    if(vboVertex && vboIndex)
+    {
+        gl.bindBuffer(gl.ARRAY_BUFFER, vboVertex);
+        gl.vertexAttribPointer(gl.program.attributePosition, 3, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribPointer(gl.program.attributeNormal, 3, gl.FLOAT, false, 0, vboVertex.normalOffset);
+        //gl.vertexAttribPointer(gl.program.attributeColor, 4, gl.FLOAT, false, 0, vboVertex.colorOffset);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vboIndex);
+        gl.drawElements(gl.TRIANGLES, vboIndex.indexCount, gl.UNSIGNED_SHORT, 0);
+        //log(vboIndex.indexCount);
+    }
+
+    // draw edge lines
+    var red = new Float32Array([1, 0, 0, 1]);
+    gl.uniform4fv(gl.program.uniformMaterialDiffuse, red);
+    gl.lineWidth(5);
+    if(vboHardEdge)
+    {
+        gl.bindBuffer(gl.ARRAY_BUFFER, vboHardEdge);
+        gl.vertexAttribPointer(gl.program.attributePosition, 3, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.LINES, 0, 24);
+    }
+    if(vboOutlineEdge)
+    {
+    }
+    gl.uniform4fv(gl.program.uniformMaterialDiffuse, gl.material.getDiffuse());
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// post frame
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+    //var lightEnabled = document.getElementById("lighting").checked;
+    //gl.uniform1i(gl.program.uniformLightEnabled, lightEnabled);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the canvas is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize()
+{
+    // resize window to fit to parent
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+
+    gl.screenWidth = gl.canvas.width;
+    gl.screenHeight = gl.canvas.height;
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.screenWidth/gl.screenHeight, 1, 2000);
+
+    // reset trackball size
+    gl.trackball(gl.screenHeight * 0.3, gl.screenWidth, gl.screenHeight);
+    log("Window is resized: " + gl.screenWidth + " x " + gl.screenHeight);
+    //alert("width: " + gl.screenWidth + " height: " + gl.screenHeight);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handlers for mouse event
+///////////////////////////////////////////////////////////////////////////////
+function handleMouseMove(e)
+{
+    //e = e || window.event; // hack for IE
+    gl.mouse.x = e.clientX - this.offsetLeft;
+    gl.mouse.y = e.clientY - this.offsetTop;
+
+    // rotate model
+    if(gl.mouse.leftDown)
+    {
+        if(gl.mouse.x != gl.mouse.downX || gl.mouse.y != gl.mouse.downY)
+        {
+            var v1 = gl.trackball.getUnitVector(gl.mouse.downX, gl.mouse.downY);
+            var v2 = gl.trackball.getUnitVector(gl.mouse.x, gl.mouse.y);
+            gl.camera.deltaQuat = Quaternion.toQuaternion(v1, v2);    // delta rotation
+            gl.camera.quat = gl.camera.deltaQuat.multiply(gl.camera.quat);
+        }
+
+        // update down position
+        gl.mouse.downX = gl.mouse.x;
+        gl.mouse.downY = gl.mouse.y;
+    }
+    if(gl.mouse.rightDown)
+    {
+        gl.camera.position.z -= (gl.mouse.y - gl.mouse.downY) * gl.camera.zoomScale;
+        //if(gl.camera.position.z < 3)
+        //    gl.camera.position.z = 3;
+        //else if(gl.camera.position.z > 20)
+        //    gl.camera.position.z = 20;
+
+        gl.mouse.downY = gl.mouse.y; // update
+    }
+    //log(gl.mouse);
+
+    // update view matrix
+    if(gl.mouse.leftDown || gl.mouse.rightDown)
+    {
+        gl.matrixView.identity();
+        gl.matrixView.translate(-gl.camera.position.x, -gl.camera.position.y, -gl.camera.position.z);
+        gl.matrixView.multiply(gl.camera.quat.toMatrix());
+        gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+    }
+}
+
+function handleMouseDown(e)
+{
+    gl.mouse.downX = gl.mouse.x;
+    gl.mouse.downY = gl.mouse.y;
+
+    //e = e || window.event; // hack for IE
+    if("which" in e)
+    {
+        switch(e.which)
+        {
+        case 1:
+            gl.mouse.leftDown = true;
+            break;
+        case 2:
+            gl.mouse.middleDown = true;
+            break;
+        case 3:
+            gl.mouse.rightDown = true;
+            break;
+        }
+    }
+    else if("button" in e) // for IE
+    {
+        if(e.button & 1)
+            gl.mouse.leftDown = true;
+        if(e.button & 2)
+            gl.mouse.rightDown = true;
+        if(e.button & 4)
+            gl.mouse.middleDown = true;
+    }
+    //log(gl.mouse);
+}
+
+function handleMouseUp(e)
+{
+    //e = e || window.event; // hack for IE
+    if("which" in e)
+    {
+        switch(e.which)
+        {
+        case 1:
+            gl.mouse.leftDown = false;
+            break;
+        case 2:
+            gl.mouse.middleDown = false;
+            break;
+        case 3:
+            gl.mouse.rightDown = false;
+            break;
+        }
+    }
+    else if("button" in e) // for IE
+    {
+        if(e.button & 1)
+            gl.mouse.leftDown = false;
+        if(e.button & 2)
+            gl.mouse.rightDown = false;
+        if(e.button & 4)
+            gl.mouse.middleDown = false;
+    }
+    //log(gl.mouse);
+}
+
+function handleClick(e)
+{
+}
+
+function handleMouseOut(e)
+{
+    gl.mouse.leftDown = false;
+    gl.mouse.rightDown = false;
+}
+
+function handleContextMenu(e)
+{
+    e.preventDefault(); // disable context menu
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// return WebGL rendering context if available
+///////////////////////////////////////////////////////////////////////////////
+function getContextGL(canvas)
+{
+    var context = null;
+    var names = ["webgl", "experimental-webgl", "moz-webgl", "webkit-3d"];
+    for(i = 0; i < names.length; ++i)
+    {
+        try{
+
+        context = canvas.getContext(names[i]);
+        if(context)
+            break;
+
+        }catch(e){}
+    }
+    if(!context)
+    {
+        log("[ERROR] Failed to get WebGL rendering context.");
+        alert("[ERROR] Failed to get WebGL context.");
+    }
+    return context;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL(gl)
+{
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);   // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+    gl.cullFace(gl.BACK);
+
+    // default light
+    gl.light = new Light(0, 0, 1, 1);
+    //gl.light.position.normalize(); //@@ fix normalize()
+    gl.light.color.set(1.0, 1.0, 1.0, 1.0);        // light color
+    gl.light.attenuations.set(1, 0.5, 0); // attenuations (constant, linear, quad)
+    log("    Light Position: " + gl.light.position);
+    log("       Light Color: " + gl.light.color);
+    log("Light Attenuations: " + gl.light.attenuations);
+    log();
+
+    // default material
+    gl.material = new Material(0.5, 0.5, 0.5, 1.0); // with default diffuse
+    gl.material.ambient.set(0.5, 0.5, 0.5, 1.0);
+    gl.material.specular.set(0.0, 0.0, 0.0, 1);
+    gl.material.shininess = 128;
+    log("  Material Ambient: " + gl.material.ambient);
+    log("  Material Diffuse: " + gl.material.diffuse);
+    log(" Material Specualr: " + gl.material.specular);
+    log("Material Shininess: " + gl.material.shininess);
+    log();
+
+    // init matrices
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, 1, 2000);
+    gl.matrixModel = new Matrix4();
+    gl.matrixView = new Matrix4();
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create vbo for a cube
+///////////////////////////////////////////////////////////////////////////////
+function initVBOs(obj)
+{
+    log(obj);
+
+    vboVertex = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboVertex);
+    gl.bufferData(gl.ARRAY_BUFFER, obj.vertices.byteLength + obj.normals.byteLength, gl.STATIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, obj.vertices);
+    gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength, obj.normals);
+    vboVertex.normalOffset = obj.vertices.byteLength;
+
+    vboIndex = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vboIndex);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, obj.indices, gl.STATIC_DRAW);
+    vboIndex.indexCount = obj.indices.length;
+
+    // generate edges
+    var vertices = ObjModel.toVertices(obj);
+    var edges = Edge.generateEdges(vertices);
+    var hardEdges = Edge.generateHardEdges(edges, 90);
+    var outlineEdges = Edge.generateOutlineEdges(edges, gl.matrixView);
+    var hardEdgeVertices = Edge.toFloat32Array(hardEdges);
+    var outlineEdgeVertices = Edge.toFloat32Array(outlineEdges);
+    if(hardEdgeVertices.length > 0)
+    {
+        vboHardEdge = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vboHardEdge);
+        gl.bufferData(gl.ARRAY_BUFFER, hardEdgeVertices, gl.STATIC_DRAW);
+    }
+    if(outlineEdgeVertices.length)
+    {
+        vboOutlineEdge = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vboOutlineEdge);
+        gl.bufferData(gl.ARRAY_BUFFER, outlineEdgeVertices, gl.STATIC_DRAW);
+    }
+
+    log("edge count: " + edges.length);
+    log("hard edge count: " + hardEdges.length);
+    log("outline edge count: " + outlineEdges.length);
+    log("hard edge vertices count: " + hardEdgeVertices.byteLength);
+    log("outline edge vertices count: " + outlineEdgeVertices.byteLength);
+
+    //obj.clearArrays();
+
+    // reset camera
+    gl.camera.zoomScale = obj.radius * 0.01;
+    gl.camera.target.x = obj.center.x;
+    gl.camera.target.y = obj.center.y;
+    gl.camera.target.z = obj.center.z;
+    gl.camera.position.z = gl.camera.target.z + obj.radius * 3;
+    gl.matrixView.identity();
+    gl.matrixView.translate(-gl.camera.position.x, -gl.camera.position.y, -gl.camera.position.z);
+    gl.camera.quat.set(1,0,0,0);
+    gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL()
+{
+    // create shader objects
+    var vertexShader = loadShaderById(gl, "vert-simple");
+    var fragmentShader = loadShaderById(gl, "frag-simple");
+    if(!vertexShader || !fragmentShader)
+        return;
+
+    // create program object and attach shader objects to it
+    gl.program = gl.createProgram();
+    gl.attachShader(gl.program, vertexShader);
+    gl.attachShader(gl.program, fragmentShader);
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+
+    // link
+    gl.linkProgram(gl.program);
+    if(!gl.getProgramParameter(gl.program, gl.LINK_STATUS))
+    {
+        alert("[ERROR] Failed to initialize GLSL: " + gl.getProgramInfoLog(gl.program));
+        log("[ERROR] Failed to initialize GLSL: " + gl.getProgramInfoLog(gl.program));
+    }
+
+    gl.useProgram(gl.program);
+
+    // setup attributes
+    gl.program.attributePosition = gl.getAttribLocation(gl.program, "vertexPosition");
+    gl.program.attributeNormal = gl.getAttribLocation(gl.program, "vertexNormal");
+    gl.enableVertexAttribArray(gl.program.attributePosition);
+    gl.enableVertexAttribArray(gl.program.attributeNormal);
+
+    // setup uniforms
+    gl.program.uniformMatrixModelView = gl.getUniformLocation(gl.program, "matrixModelView");
+    gl.program.uniformMatrixView = gl.getUniformLocation(gl.program, "matrixView");
+    gl.program.uniformMatrixNormal = gl.getUniformLocation(gl.program, "matrixNormal");
+    gl.program.uniformMatrixModelViewProjection = gl.getUniformLocation(gl.program, "matrixModelViewProjection");
+
+    // setup uniforms light and marerial
+    gl.program.uniformLightEnabled = gl.getUniformLocation(gl.program, "lightEnabled");
+    gl.program.uniformLightPosition = gl.getUniformLocation(gl.program, "lightPosition");
+    gl.program.uniformLightColor = gl.getUniformLocation(gl.program, "lightColor");
+    gl.program.uniformLightAttenuations = gl.getUniformLocation(gl.program, "lightAttenuations");
+    gl.program.uniformMaterialAmbient = gl.getUniformLocation(gl.program, "materialAmbient");
+    gl.program.uniformMaterialDiffuse = gl.getUniformLocation(gl.program, "materialDiffuse");
+    gl.program.uniformMaterialSpecular = gl.getUniformLocation(gl.program, "materialSpecular");
+    gl.program.uniformMaterialShininess = gl.getUniformLocation(gl.program, "materialShininess");
+
+    // set light and material uniforms
+    gl.uniform1i(gl.program.uniformLightEnabled, 1);    // toggle on/off lighting
+    gl.uniform4fv(gl.program.uniformLightPosition, gl.light.getPosition());
+    gl.uniform4fv(gl.program.uniformLightColor, gl.light.getColor());
+    gl.uniform3fv(gl.program.uniformLightAttenuations, gl.light.getAttenuations());
+    gl.uniform4fv(gl.program.uniformMaterialAmbient, gl.material.getAmbient());
+    gl.uniform4fv(gl.program.uniformMaterialDiffuse, gl.material.getDiffuse());
+    gl.uniform4fv(gl.program.uniformMaterialSpecular, gl.material.getSpecular());
+    gl.uniform1f(gl.program.uniformMaterialShininess, gl.material.shininess);
+
+
+/*
+    gl.shaderManager = new ShaderManager(gl);
+    gl.shaderManager.load("files/glsl/gles_perPixelColor.vert", "files/glsl/gles_perPixelColor.frag");
+    gl.program = gl.shaderManager.getProgram("gles_perPixelColor");
+    gl.useProgram(gl.program);
+
+    // setup attributes
+    gl.enableVertexAttribArray(gl.program.attribute.vertexPosition);
+    gl.enableVertexAttribArray(gl.program.attribute.vertexNormal);
+    //gl.enableVertexAttribArray(gl.program.attribute.vertexColor);
+
+    // set light and material uniforms
+    gl.uniform1i(gl.program.uniform.lightEnabled, 1);   // toggle on/off lighting
+    gl.uniform4fv(gl.program.uniform.lightPosition, gl.light.getPosition());
+    gl.uniform4fv(gl.program.uniform.lightColor, gl.light.getColor());
+    gl.uniform3fv(gl.program.uniform.lightAttenuations, gl.light.getAttenuations());
+    gl.uniform4fv(gl.program.uniform.materialAmbient, gl.material.getAmbient());
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material.getDiffuse());
+    gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material.getSpecular());
+    gl.uniform1f(gl.program.uniform.materialShininess, gl.material.shininess);
+*/
+}
+
+
+
+function compatibilityCode()
+{
+    // Firefox compatibility code
+    // The WebGL*Array where named Canvas*Array in the past.
+    // However, this will only affect old nightly builds. The current nightly does already
+    // support the new names. (13 Dec 2009).
+    try{
+        WebGLFloatArray;
+    }catch(e){
+        try{
+            WebGLArrayBuffer = CanvasArrayBuffer;
+            WebGLByteArray = CanvasByteArray;
+            WebGLUnsignedByteArray = CanvasUnsignedByteArray;
+            WebGLShortArray = CanvasShortArray;
+            WebGLUnsignedShortArray = CanvasUnsignedShortArray;
+            WebGLIntArray = CanvasIntArray;
+            WebGLUnsignedIntArray = CanvasUnsignedIntArray;
+            WebGLFloatArray = CanvasFloatArray;
+        }catch(e){
+            alert("Could not find Canvas array types for WebGL.");
+        }
+    }
+
+    // Google Chrome compatibility code
+    // Since a JavaScript function may have multiple return types, functions
+    // 'getProgrami' and 'getShaderi' where renamed. However, Chrome does still
+    // use the old names.  (30 Nov 2009)
+    if(!gl.getProgramParameter)
+    {
+        gl.getProgramParameter = gl.getProgrami;
+    }
+    if(!gl.getShaderParameter)
+    {
+        gl.getShaderParameter = gl.getShaderi;
+    }
+}
+
+
+
+function resetCamera()
+{
+    gl.camera.position.z = CAMERA_Z;
+    gl.matrixView.identity();
+    gl.matrixView.translate(-gl.camera.position.x, -gl.camera.position.y, -gl.camera.position.z);
+    gl.camera.quat.set(1,0,0,0);
+    gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+}
+
+
+
+
+// ]]>
+</script>
+
+</head>
+
+<body>
+
+<div class="contentblock">
+
+<div class="centerblock">
+<canvas id="webglView" width="512" height="512">
+Your browser does not support canvas element!
+</canvas>
+</div>
+
+</div> <!-- end of contentblock -->
+</body>
+</html>
