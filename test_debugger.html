@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- ==========================================================================
+DeBugger
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2016-06-24
+UPDATED: 2024-05-06
+===============================================================================
+-->
+
+<head>
+<title>DeBugger</title>
+<meta name="generator" content="editplus" />
+<meta name="author" content="Song Ho Ahn" />
+<meta name="keywords" content="DeBugger" />
+<meta name="description" content="DeBugger 3D OBJ model" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8">
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:"segoe ui", "HelveticaNeue-Light", "Helvetica Neue", "Helvetica", sans-serif;
+    font-weight:200;
+    box-sizing:border-box;
+    overflow:hidden;
+}
+p {
+    margin:0 0 1em 0;
+}
+
+.flexblock {
+    display:flex;
+    height:100vh;
+}
+.col1 {
+    flex:1 0 auto;
+    position:relative;
+    margin:10px 0px 20px 10px;
+}
+.col2 {
+    flex:0 0 300px;
+    line-height:1.1em;
+    padding:10px;
+    overflow:auto;
+}
+
+.webglblock {
+    position:absolute;
+    left:0;
+    right:0;
+    top:0;
+    bottom:0;
+}
+#webglView {
+    width:100%;
+    height:100%;
+    box-sizing:border-box;
+    border:1px solid #ccc;
+    touch-action:none; /* prevent browser handle pointer events */
+}
+
+.col2 h4 {
+    text-align:center;
+    margin:0.4em 0 0.4em 0;
+}
+.col2 address {
+    font-size:0.9em;
+    color:#888;
+}
+.col2 ol {
+    font-size:0.9em;
+    padding-left:1em;
+}
+.col2 li {
+    margin-bottom:0.5em;
+}
+
+#title {
+    position:absolute;
+    top:0px;
+    left:5px;
+    font-family:georgia, serif;
+    font-size:2.5em;
+    font-style:italic;
+    color:#000;
+}
+#fps {
+    position:absolute;
+    top:0px;
+    right:2px;
+    font-size:12px;
+    color:#666;
+}
+#form1 {
+    position:absolute;
+    left:5px;
+    bottom:5px;
+    font-size:14px;
+}
+
+@media (max-aspect-ratio:1/1) { /* w/h */
+    .flexblock {
+        flex-direction:column;
+    }
+    .col1 {
+        margin:10px 10px 0px 10px;
+    }
+    .col2 {
+        flex:0 0 auto;
+        max-height:300px;
+    }
+    .col2 ol {
+        padding-left:2em;
+}
+
+</style>
+
+
+
+<!-- JavaScript -->
+<script type="text/javascript"src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script type="text/javascript" src="files/js/Vectors.js"></script>
+<script type="text/javascript" src="files/js/Matrices.js"></script>
+<script type="text/javascript" src="files/js/Quaternion.js"></script>
+<script type="text/javascript" src="files/js/Light.js"></script>
+<script type="text/javascript" src="files/js/Material.js"></script>
+<script type="text/javascript" src="files/js/Timer.js"></script>
+<script type="text/javascript" src="files/js/FrameRate.js"></script>
+<script type="text/javascript" src="files/js/AnimationMode.js"></script>
+<script type="text/javascript" src="files/js/webglUtils.js"></script>
+<script type="text/javascript" src="files/js/ObjModel.js"></script>
+<script type="text/javascript" src="files/js/OrbitCamera.js"></script>
+
+
+<script type="text/javascript">
+// <![CDATA[
+
+var gl = null;
+
+var CAMERA_DIST = 15;
+var Z_NEAR = 1;
+var Z_FAR = 500;
+var FOV_V = 45;
+var IMAGE_PATH = "files/images/";
+var MODEL_PATH = "files/models/";
+//var MODEL_PATH = "files/models/obj/";
+var GLSL_PATH  = "files/glsl/";
+var ANIM_DURATION = 500; // ms
+
+
+///////////////////////////////////////////////////////////////////////////////
+// main entry point
+///////////////////////////////////////////////////////////////////////////////
+document.addEventListener("DOMContentLoaded", function()
+{
+    var success = initWebGL("webglView");
+    if(!success)
+        return;
+
+    // init html elements
+    initHtmlElements();
+});
+
+
+
+// WebGL ======================================================================
+function initWebGL(canvasId)
+{
+    try{
+
+    var canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        var parentNode = canvas.parentNode;
+        var message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        parentNode.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                               message +
+                               "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // resize canvas window to fit in the parent
+    canvas.width = canvas.parentNode.clientWidth;
+    canvas.height = canvas.width * 0.5;
+
+    // get context
+    gl = getContextGL(canvas);
+    if(!gl)
+    {
+        //log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // remember the canvas
+    gl.canvas = canvas;
+
+    initGL(gl);
+    initGLSL(gl);
+    log("WebGL is initialized.");
+
+    // init app ===============================================================
+
+    // OBJ model
+    gl.model = new ObjModel(gl);
+    gl.model.read(MODEL_PATH+"debugger_50k.obj").then(obj =>
+    {
+        log("\nLoaded an OBJ model: debugger_50k.obj");
+        log(obj);
+
+        // create VBOs
+        gl.model.vboVertex = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.model.vboVertex);
+        gl.bufferData(gl.ARRAY_BUFFER, obj.vertices.byteLength + obj.normals.byteLength + obj.texCoords.byteLength, gl.STATIC_DRAW);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, obj.vertices);
+        gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength, obj.normals);
+        gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength + obj.normals.byteLength, obj.texCoords);
+        gl.model.vboVertex.normalOffset = obj.vertices.byteLength;
+        gl.model.vboVertex.texCoordOffset = obj.vertices.byteLength + obj.normals.byteLength;
+
+        gl.model.vboIndex = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.model.vboIndex);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, obj.indices, gl.STATIC_DRAW);
+        gl.model.vboIndex.indexCount = obj.indices.length;
+
+        // reposition camera
+        resetCamera()
+
+        // start rendering loop
+        startRendering(gl);
+
+        //obj.textureUsed = false;
+        //obj.normalMapUsed = false;
+    });
+
+    // load texture
+    loadTexture(gl, IMAGE_PATH + "debugger.png", false, function(tex)
+    {
+        gl.model.tex0 = tex;
+    });
+
+    // init array of pointer objects
+    gl.pointers = [];
+
+    // register event handlers
+    registerEventHandlers(canvas);
+
+    return true;
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+        return false;
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// start rendering loop
+///////////////////////////////////////////////////////////////////////////////
+function startRendering(gl)
+{
+    log("\nStarting rendering loop...\n");
+
+    // try to find "requestAnimationFrame" function
+    // if it is not available use setTimeout() instead
+    var requestAnimationFrame = getRequestAnimationFrameFunction(window);
+    var timer = new Timer();
+    gl.fps = new FrameRate("fps");
+    var frameCallback = function()
+    {
+        gl.fps.tick();
+        gl.frameTime = timer.getFrameTime();
+        gl.runTime += gl.frameTime;
+        frame();
+        postFrame();
+        requestAnimationFrame(frameCallback);
+    };
+
+    timer.start();
+    gl.runTime = 0;
+    requestAnimationFrame(frameCallback);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    drawModel();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// post frame
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+    if(gl.dom.spin.checked)
+    {
+        var angle = gl.camera.angle.clone();
+        angle.y += 0.1;
+        if(angle.y > 360)
+            angle.y = angle.y % 360;
+        gl.camera.rotateTo(angle);
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a model
+///////////////////////////////////////////////////////////////////////////////
+function drawModel()
+{
+    // set active program
+    gl.program = gl.shaderPrograms["goochTex"];
+    gl.useProgram(gl.program);
+
+    // set view transform
+    gl.matrixView = gl.camera.matrix;
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+
+    // set modelview matrix
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+
+    // compute normal transform
+    gl.matrixNormal = gl.matrixModelView.clone();
+    gl.matrixNormal.setTranslation(0,0,0); // remove tranlsation part
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+
+    // compute projection matrix
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.model.tex0);
+
+    // draw OBJ
+    if(gl.model.vboVertex && gl.model.vboIndex)
+    {
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.model.vboVertex);
+        gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, gl.model.vboVertex.normalOffset);
+        gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 0, gl.model.vboVertex.texCoordOffset);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.model.vboIndex);
+        gl.drawElements(gl.TRIANGLES, gl.model.vboIndex.indexCount, gl.UNSIGNED_SHORT, 0);
+    }
+
+    // unbind texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// register event handlers to canvas
+///////////////////////////////////////////////////////////////////////////////
+function registerEventHandlers(canvas)
+{
+    // register event handlers
+    window.addEventListener("resize",  handleResize, false);
+    log("Added window resize envent listener, handleResize().");
+
+    window.addEventListener("keydown", handleKeyDown, false);
+    log("Added window keydown event listener, handleKeyDown().");
+
+    window.addEventListener("keyup", handleKeyUp, false);
+    log("Added window keyup event listener, handleKeyUp().");
+
+    canvas.addEventListener("click", handleClick, false);
+    log("Added canvas click event listener, handleClick().");
+
+    canvas.addEventListener("dblclick", handleDoubleClick);
+    log("Added canvas dblclick event listener, handleDoubleClick().");
+
+    canvas.addEventListener("contextmenu", handleContextMenu, false);
+    log("Added canvas contextmenu event listener, handleContextMenu().");
+
+    canvas.addEventListener("wheel", handleWheel);
+    log("Added canvas wheel event listeners, handleWheel()");
+
+    // canvas pointer events
+    canvas.addEventListener("pointerdown", handlePointerDown, false);
+    log("Added canvas pointerdown event listeners, handlePointerDown()");
+    canvas.addEventListener("pointerup", handlePointerUp, false);
+    log("Added canvas pointerup event listeners, handlePointerUp()");
+    canvas.addEventListener("pointermove", handlePointerMove, false);
+    log("Added canvas pointermove event listeners, handlePointerMove()");
+    canvas.addEventListener("pointercancel", handlePointerCancel, false);
+    log("Added canvas pointercancel event listeners, handlePointerCancel()");
+    canvas.addEventListener("pointerleave", handlePointerLeave, false);
+    log("Added canvas pointerleave event listeners, handlePointerLeave()");
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the window is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize()
+{
+    // get the client dimension of whole window
+    var width = gl.canvas.parentNode.clientWidth;
+    var height = gl.canvas.parentNode.clientHeight;
+
+    // adjust canvas dimension
+    gl.canvas.width = width;
+    gl.canvas.height =height;
+    gl.canvas.style.width = width + "px";
+    gl.canvas.style.height = height + "px";
+
+    // reset viewport and projection matrix
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(FOV_V, gl.canvas.width/gl.canvas.height, gl.nearPlane, gl.farPlane);
+
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handlers for mouse event
+///////////////////////////////////////////////////////////////////////////////
+function handleWheel(e)
+{
+    // positive deltaY = wheel down
+    // negative deltaY = wheel up
+    if(e.deltaY != 0)
+    {
+        //console.log(e.deltaY);
+        const ZOOM_SCALE = 0.001;
+        let deltaDistance = -e.deltaY * ZOOM_SCALE * gl.model.radius;
+        if((gl.camera.distance - deltaDistance) < gl.nearPlane)
+            deltaDistance = gl.camera.distance - gl.nearPlane;
+        else if((gl.camera.distance - deltaDistance) > gl.farPlane)
+            deltaDistance = gl.camera.distance - gl.farPlane;
+
+        gl.camera.moveForward(deltaDistance);
+    }
+    e.preventDefault();
+}
+function handleClick(e)
+{
+}
+
+function handleDoubleClick(e)
+{
+}
+function handleContextMenu(e)
+{
+    e.preventDefault(); // disable context menu
+}
+
+function handleKeyDown(e)
+{
+}
+
+function handleKeyUp(e)
+{
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handle pointer events: input is PointerEvent object
+///////////////////////////////////////////////////////////////////////////////
+function handlePointerDown(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    let offset = getElementOffset(this);    // get canvas offset
+    gl.pointers.push(copyPointer(pe, offset));
+
+    // remember down pointer and angles when pointer down
+    if(gl.pointers.length == 1)
+    {
+        gl.camera.pointerAngle = gl.camera.angle.clone();
+        gl.pointers.downs = []; // clear
+        gl.pointers.downs.push(copyPointer(pe, offset));
+        // handle right mouse button(0=left, 2=right)
+        gl.pointers[0].button = pe.button;
+    }
+    else if(gl.pointers.length == 2)
+    {
+        // remember second pointer
+        gl.pointers.downs.push(copyPointer(pe, offset));
+    }
+}
+
+function handlePointerUp(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    // get array index matching from gl.pointers
+    let index = gl.pointers.findIndex(pointer => pointer.id == pe.pointerId);
+    if(index >= 0) // found
+    {
+        gl.pointers.splice(index, 1);   // remove it
+        gl.pointers.distance = 0;       // clear
+    }
+}
+
+function handlePointerMove(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    // get the current moving pointer and replace it in the array
+    let offset = getElementOffset(this);    // get canvas offset
+    let index = gl.pointers.findIndex(p => p.id == pe.pointerId);
+    if(index == 0)
+    {
+        // remember delta movement
+        gl.pointers[0].delta = new Vector2((pe.pageX - offset.x) - gl.pointers[0].x, (pe.pageY - offset.y) - gl.pointers[0].y);
+        // update
+        gl.pointers[0].x = pe.pageX - offset.x;
+        gl.pointers[0].y = pe.pageY - offset.y;
+    }
+    else if(index == 1)
+    {
+        // remember delta movement
+        gl.pointers[1].delta = new Vector2((pe.pageX - offset.x) - gl.pointers[1].x, (pe.pageY - offset.y) - gl.pointers[1].y);
+        // update
+        gl.pointers[1].x = pe.pageX - offset.x;
+        gl.pointers[1].y = pe.pageY - offset.y;
+    }
+
+    // if 2 pointers, perform shift/zoom
+    if(gl.pointers.length == 2)
+    {
+        const SCALE_SHIFT = 0.5;
+        const SCALE_ZOOM = 0.1;
+
+        let d1 = gl.pointers[0].delta.normalize();
+        let d2 = gl.pointers[1].delta.normalize();
+        let dir = gl.pointers[0].delta.add(gl.pointers[1].delta).scale(0.5);   // sum vector of 2 delta vectors
+        let v = new Vector2(gl.pointers[1].x - gl.pointers[0].x, gl.pointers[1].y - gl.pointers[0].y);
+        let dist = v.length();              // distance of 2 vectors
+        if(d1.dot(d2) > 0.95)
+        {
+            // shift camera if same direction
+            gl.camera.shift(dir.scale(SCALE_SHIFT));
+        }
+        else
+        {
+            // zoom camera if opposite direction
+            let deltaDistance = 0;
+            if(gl.pointers.distance > 0)
+                deltaDistance = dist - gl.pointers.distance;
+            gl.pointers.distance = dist;     // remember
+            gl.camera.moveForward(deltaDistance * SCALE_ZOOM);
+        }
+    }
+    // if 1 down, perform rotate
+    else if(gl.pointers.length == 1)
+    {
+        const SCALE_ROTATE = 0.2;
+        const SCALE_SHIFT = 0.05;
+
+        // shift if dragging right mouse button
+        if(pe.pointerType == "mouse" && gl.pointers[0].button == 2)
+        {
+            let delta = gl.pointers[0].delta.normalize();
+            delta = delta.scale(SCALE_SHIFT);
+            gl.camera.shift(delta);
+        }
+        else
+        {
+            let angle = new Vector3();
+            angle.x = gl.camera.pointerAngle.x + (gl.pointers[0].y - gl.pointers.downs[0].y) * SCALE_ROTATE;
+            angle.y = gl.camera.pointerAngle.y - (gl.pointers[0].x - gl.pointers.downs[0].x) * SCALE_ROTATE;
+
+            gl.camera.rotateTo(angle);
+        }
+    }
+}
+
+function handlePointerCancel(pe)
+{
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
+}
+
+function handlePointerLeave(pe)
+{
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
+}
+
+function copyPointer(pe, offset={x:0,y:0})
+{
+    // return pointer data
+    return {id:pe.pointerId, x:pe.clientX - offset.x, y:pe.clientY - offset.y};
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL(gl)
+{
+    gl.clearColor(1.0, 1.0, 1.0, 0.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);   // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+    gl.cullFace(gl.BACK);
+    gl.enable(gl.BLEND);        // enable blend
+
+    // default light
+    gl.light = new Light(0, 0, 1, 0);
+    //gl.light.position.normalize(); //@@ fix normalize()
+    gl.light.color.set(1.0, 1.0, 1.0, 1.0);        // light color
+    gl.light.attenuations.set(1, 0.0, 0); // attenuations (constant, linear, quad)
+    log("    Light Position: " + gl.light.position);
+    log("       Light Color: " + gl.light.color);
+    log("Light Attenuations: " + gl.light.attenuations);
+    log();
+
+    // default material
+    gl.material = new Material(0.9, 0.9, 0.9, 1.0); // with default diffuse
+    gl.material.ambient.set(0.3, 0.3, 0.3, 1.0);
+    gl.material.specular.set(1.0, 1.0, 1.0, 1);
+    gl.material.shininess = 128;
+    log("  Material Ambient: " + gl.material.ambient);
+    log("  Material Diffuse: " + gl.material.diffuse);
+    log(" Material Specualr: " + gl.material.specular);
+    log("Material Shininess: " + gl.material.shininess);
+    log();
+
+    // init camera with position and target
+    gl.camera = new OrbitCamera(0, 0, CAMERA_DIST, 0, 0, 0);
+    log("Created an orbit camera.");
+    log(gl.camera);
+
+    // set near and far clip planes
+    gl.nearPlane = Z_NEAR;
+    gl.farPlane = Z_FAR;
+
+    // init matrices
+    handleResize();
+    gl.matrixModel = new Matrix4();
+    gl.matrixView = gl.camera.matrix;
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL(gl)
+{
+    // enable all vertexAttribArray
+    initVertexAttribArrays(gl);
+
+    // load shaders
+    gl.shaderPrograms = {}; // associative array
+
+    // load phong shader
+    createShaderProgram(gl, GLSL_PATH+"gles_goochTex.vert", GLSL_PATH+"gles_goochTex.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
+        gl.uniform4fv(program.uniform.lightColor, gl.light.getColor());
+        //gl.uniform4fv(program.uniform.materialAmbient, gl.material.getAmbient());
+        gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
+        //gl.uniform4fv(program.uniform.materialSpecular, gl.material.getSpecular());
+        //gl.uniform1f(program.uniform.materialShininess, gl.material.shininess);
+        gl.uniform1i(program.uniform.map0, 0);
+        gl.uniform4fv(program.uniform.warmColor, new Float32Array([0.0, 0.0, 0.0, 1]));
+        gl.uniform4fv(program.uniform.coolColor, new Float32Array([0.9, 0.9, 0.0, 1]));
+        gl.uniform1f(program.uniform.warmWeight, 0.9);
+        gl.uniform1f(program.uniform.coolWeight, 0.01);
+
+        gl.shaderPrograms["goochTex"] = program;
+    });
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init DOM elements, all elements are stored in gl.dom
+///////////////////////////////////////////////////////////////////////////////
+function initHtmlElements()
+{
+    // html elements
+    gl.dom = {};
+
+    // spin checkbox
+    gl.dom.spin = document.getElementById("form1").elements["spin"];
+
+    // reset button
+    gl.dom.reset = document.getElementById("form1").elements["reset"];
+    gl.dom.reset.addEventListener("click", resetCamera, false);
+
+    /*
+    // camera controls
+    // events for camera navigation controlls
+    gl.dom.camShiftL = document.getElementById("camShiftL");
+    gl.dom.camShiftL.addEventListener("mousedown", function()
+    {
+        gl.camera.startShift(new Vector2(gl.model.radius*0.5, 0), gl.model.radius*2);
+    }, false);
+    gl.dom.camShiftL.addEventListener("mouseup", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+    gl.dom.camShiftL.addEventListener("mouseout", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+
+    gl.dom.camShiftR = document.getElementById("camShiftR");
+    gl.dom.camShiftR.addEventListener("mousedown", function()
+    {
+        gl.camera.startShift(new Vector2(-gl.model.radius*0.5, 0), gl.model.radius*2);
+    }, false);
+    gl.dom.camShiftR.addEventListener("mouseup", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+    gl.dom.camShiftR.addEventListener("mouseout", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+
+    gl.dom.camShiftU = document.getElementById("camShiftU");
+    gl.dom.camShiftU.addEventListener("mousedown", function()
+    {
+        gl.camera.startShift(new Vector2(0, gl.model.radius*0.5), gl.model.radius*2);
+    }, false);
+    gl.dom.camShiftU.addEventListener("mouseup", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+    gl.dom.camShiftU.addEventListener("mouseout", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+
+    gl.dom.camShiftD = document.getElementById("camShiftD");
+    gl.dom.camShiftD.addEventListener("mousedown", function()
+    {
+        gl.camera.startShift(new Vector2(0, -gl.model.radius*0.5), gl.model.radius*2);
+    }, false);
+    gl.dom.camShiftD.addEventListener("mouseup", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+    gl.dom.camShiftD.addEventListener("mouseout", function()
+    {
+        gl.camera.stopShift();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+
+    gl.dom.camForward = document.getElementById("camForward");
+    gl.dom.camForward.addEventListener("mousedown", function()
+    {
+        gl.camera.startForward(gl.model.radius*0.5, gl.model.radius*2);
+    }, false);
+    gl.dom.camForward.addEventListener("mouseup", function()
+    {
+        gl.camera.stopForward();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+    gl.dom.camForward.addEventListener("mouseout", function()
+    {
+        gl.camera.stopForward();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+
+    gl.dom.camBackward = document.getElementById("camBackward");
+    gl.dom.camBackward.addEventListener("mousedown", function()
+    {
+        gl.camera.startForward(-gl.model.radius*0.5, gl.model.radius*2);
+    }, false);
+    gl.dom.camBackward.addEventListener("mouseup", function()
+    {
+        gl.camera.stopForward();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+    gl.dom.camBackward.addEventListener("mouseout", function()
+    {
+        gl.camera.stopForward();
+        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
+    }, false);
+    */
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reset camera
+///////////////////////////////////////////////////////////////////////////////
+function resetCamera()
+{
+    var a = new Vector3(0,0,0);
+    gl.camera.rotateTo(a, 1000, AnimationMode.EASE_OUT);
+
+    var d = gl.camera.distance - gl.model.radius*2.5;
+    gl.camera.moveForward(d, 1000, AnimationMode.EASE_OUT);
+
+    var t = gl.model.center;
+    gl.camera.shiftTo(t, 1000, AnimationMode.EASE_OUT);
+}
+
+
+
+
+
+
+// ]]>
+</script>
+
+</head>
+
+<body>
+
+<!-- full container block ================================================= -->
+<div class="flexblock">
+
+<!-- webgl container ====================================================== -->
+<div class="col1">
+<div class="webglblock">
+
+<canvas id="webglView"></canvas>
+
+<div id="title">DeBugger</div>
+
+<div id="fps">FPS: 0</div>
+
+<form id="form1" name="form1">
+<label><input name="spin" type="checkbox" checked>Spin</label>
+<button type="button" name="reset">Reset Camera</button>
+</form>
+
+</div>
+</div>
+<!-- end of webgl container -->
+
+
+<!-- text block =========================================================== -->
+<div class="col2">
+<h4>
+Rubber Duck Debugging
+</h4>
+<q>
+Place a rubber duck on your monitor and describe your problems to it. There's something magical about stating your problems aloud that makes the solution more clear.
+</q>
+<br>
+<br>
+<address>
+- The Pragmatic Programmer p. 95 by Andrew Hunt and David Thomas
+</address>
+<br>
+<h4>
+Steps
+</h4>
+<ol>
+<li>Beg, borrow, steal, buy, fabricate or otherwise obtain a rubber duck (bathtub variety)</li>
+<li>Place rubber duck on desk and inform it you are just going to go over some code with it, if that's all right.</li>
+<li>Explain to the duck what you code is supposed to do, and then go into detail and explain things line by line.</li>
+<li>At some point you will tell the duck what you are doing next and then realise that that is not in fact what you are actually doing.  The duck will sit there serenely, happy in the knowledge that it has helped you on your way.</li>
+</ol>
+</div>
+<!-- end of text block -->
+
+</div>
+<!-- end of full content block ============================================= -->
+
+
+</body>
+</html>
