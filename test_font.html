@@ -377,9 +377,6 @@ function drawTexts()
     gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([0.1,0.3,1,1]));
     gl.font.drawText("1234567890", 1, 1, -1);
 
-    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([0.0,0.0,0.0,1]));
-    gl.font.drawText("Bitmap Font", -1, 1, -1);
-
     //gl.disable(gl.BLEND);
     //gl.enable(gl.DEPTH_TEST);
 }
