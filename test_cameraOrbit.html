@@ -2,11 +2,11 @@
 <html lang="en">
 
 <!-- ==========================================================================
-testing OrbitCamera
+testing OrbitCamera class
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2013-10-24
-UPDATED: 2020-05-27
+UPDATED: 2025-05-10
 ===============================================================================
 -->
 
@@ -17,6 +17,7 @@ UPDATED: 2020-05-27
 <meta name="keywords" content="" />
 <meta name="description" content="" />
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
 <!-- CSS -->
 <style type="text/css">
@@ -24,12 +25,53 @@ body {
     margin:0;
     padding:0;
     font-family:arial,helvetica,sans-serif;
+    box-sizing:border-box;
+}
+h3 {
+    margin:0 0 5px 0;
 }
 p {
-    margin-top:0;
+    margin:0 0 1em 0;
 }
-h4 {
-    margin:0;
+.contentblock {
+    display:flex;
+    position:absolute;
+    left:0px;
+    right:0px;
+    top:0px;
+    bottom:0px;
+    padding:10px;
+    line-height:0;
+}
+.mainblock {
+    position:relative;
+    flex:1 1 auto;
+    border:1px solid #ddd;
+}
+.rightblock {
+    flex:0 0 250px;
+    height:100%;
+    overflow:auto;
+    margin-left:10px;
+    line-height:110%;
+}
+#webglView {
+    width:100%;
+    height:100%;
+    touch-action:none; /* prevent browser handle pointer events */
+}
+#info {
+    position:absolute;
+    top:0;
+    right:0;
+    margin-top:5px;
+    margin-right:5px;
+    line-height:110%;
+}
+hr {
+    height:1px;
+    background-color:#aaa;
+    border:none;
 }
 .noselect {
 	-webkit-user-select:none;
@@ -37,53 +79,19 @@ h4 {
 	-ms-user-select:none;
 	user-select:none;
 }
-
-.contentblock {
-    position:absolute;
-    left:0px;
-    right:0px;
-    top:0px;
-    bottom:0px;
-}
-
-.webglblock {
-	position:absolute;
-	left:10px;
-	right:10px;
-	top:10px;
-	bottom:10px;
-    line-height:0;
-}
-#webglView {
-    /* to fix smaller canvas width */
-    width:100%;
-    height:100%;
-    border:1px solid #ccc;
-    box-sizing:border-box;
-}
-#fps {
-    position:absolute;
-    top:0;
-    right:1px;
-    font-size:12px;
-    color:#666;
-    line-height:1.2em;
-    /*margin:0.2em;*/
-}
-
 .camInfo {
     position:absolute;
-    top:2px;
-    left:2px;
+    top:5px;
+    left:5px;
     font-size:14px;
     line-height:120%;
 }
 .camWrap {
     position:absolute;
-    bottom:70px;
+    bottom:75px;
     left:0px;
     margin-top:5px;
-    margin-left:5px;
+    margin-left:10px;
 }
 .camControl {
     position:absolute;
@@ -133,33 +141,33 @@ h4 {
 	top:35px;
 }
 #camReset {
-    width:70px;
+    width:60px;
     font-size:12px;
 	left:175px;
 	top:35px;
 }
 #camFront {
-    width:65px;
+    width:50px;
     font-size:12px;
-    left:260px;
+    left:250px;
     top:35px;
 }
 #camBack {
-    width:65px;
+    width:50px;
     font-size:12px;
-    left:330px;
+    left:305px;
     top:35px;
 }
 #camLeft {
-    width:65px;
+    width:50px;
     font-size:12px;
-    left:400px;
+    left:360px;
     top:35px;
 }
 #camRight {
-    width:65px;
+    width:50px;
     font-size:12px;
-    left:470px;
+    left:415px;
     top:35px;
 }
 
@@ -177,19 +185,20 @@ h4 {
 <script src="files/js/Material.js"></script>
 <script src="files/js/Timer.js"></script>
 <script src="files/js/FrameRate.js"></script>
-<script src="files/js/MouseState.js"></script>
 <script src="files/js/AnimationMode.js"></script>
 <script src="files/js/webglUtils.js"></script>
 <script src="files/js/ObjModel.js"></script>
 <script src="files/js/LineSegment.js"></script>
+<script src="files/js/Circle.js"></script>
 <script src="files/js/OrbitCamera.js"></script>
 
 
 <script type="text/javascript">
-// <![CDATA[
 
+// global vars
 let gl = null;
 
+// constants
 const CAMERA_DIST = 15;
 const Z_NEAR = 1;
 const Z_FAR = 500;
@@ -204,7 +213,7 @@ const ANIM_DURATION = 500; // ms
 ///////////////////////////////////////////////////////////////////////////////
 // main entry point
 ///////////////////////////////////////////////////////////////////////////////
-document.addEventListener("DOMContentLoaded", function()
+document.addEventListener("DOMContentLoaded", () =>
 {
     let success = initWebGL("webglView");
     if(!success)
@@ -244,22 +253,22 @@ function initWebGL(canvasId)
     }
     logWebGL(gl);
 
-    // resize canvas window to fit in the parent
-    canvas.width = canvas.parentNode.clientWidth;
-    canvas.height = canvas.parentNode.clientHeight;
+    // remember canvas
     gl.canvas = canvas;
 
+    // init gl and glsl
     initGL(gl);
     initGLSL(gl);
     log("WebGL is initialized.");
 
     // init app ===============================================================
 
-    // init touch states
-    gl.touches = [];
-
     // line
     gl.line = new LineSegment(gl);
+
+    // circle
+    gl.circle = new Circle(gl);
+    gl.circle.setSegmentCount(100);
 
     // OBJ model
     gl.model = new ObjModel(gl);
@@ -269,41 +278,83 @@ function initWebGL(canvasId)
         log(obj);
 
         // create VBOs
-        gl.model.vboVertex = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, gl.model.vboVertex);
+        gl.model.vbo = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.model.vbo);
         gl.bufferData(gl.ARRAY_BUFFER, obj.vertices.byteLength + obj.normals.byteLength, gl.STATIC_DRAW);
         gl.bufferSubData(gl.ARRAY_BUFFER, 0, obj.vertices);
         gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength, obj.normals);
-        gl.model.vboVertex.normalOffset = obj.vertices.byteLength;
+        gl.model.vbo.normalOffset = obj.vertices.byteLength;
 
-        gl.model.vboIndex = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.model.vboIndex);
+        gl.model.ibo = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.model.ibo);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, obj.indices, gl.STATIC_DRAW);
-        gl.model.vboIndex.indexCount = obj.indices.length;
+        gl.model.ibo.indexCount = obj.indices.length;
+
+        // reset circle radius
+        gl.circle.setRadius(obj.radius);
 
         // reposition camera
         resetCamera()
 
-        // ready to start rendering loop
-        startRendering(gl);
-
-        //obj.textureUsed = false;
-        //obj.normalMapUsed = false;
     }).catch(msg => log(msg));
 
-    // add mouse state holder
-    gl.mouse = new MouseState();
+    // init array of pointer objects
+    gl.pointers = [];
 
     // register event handlers
-    registerEventHandlers(canvas);
+    window.addEventListener("resize",  handleResize);
+    log("Added window resize envent listener, handleResize().");
+    canvas.addEventListener("click", handleClick);
+    log("Added canvas click event listener, handleClick().");
+    canvas.addEventListener("contextmenu", handleContextMenu);
+    log("Added canvas contextmenu event listener, handleContextMenu().");
+    canvas.addEventListener("wheel", handleWheel);
+    log("Added canvas wheel event listeners, handleWheel()");
+    // canvas pointer events
+    canvas.addEventListener("pointerdown", handlePointerDown, false);
+    log("Added canvas pointerdown event listeners, handlePointerDown()");
+    canvas.addEventListener("pointerup", handlePointerUp, false);
+    log("Added canvas pointerup event listeners, handlePointerUp()");
+    canvas.addEventListener("pointermove", handlePointerMove, false);
+    log("Added canvas pointermove event listeners, handlePointerMove()");
+    canvas.addEventListener("pointercancel", handlePointerCancel, false);
+    log("Added canvas pointercancel event listeners, handlePointerCancel()");
+    canvas.addEventListener("pointerleave", handlePointerLeave, false);
+    log("Added canvas pointerleave event listeners, handlePointerLeave()");
+    // keybord events
+    window.addEventListener("keydown", handleKeyDown, false);
+    log("Added window keydown event listener, handleKeyDown().");
+    window.addEventListener("keyup", handleKeyUp, false);
+    log("Added window keyup event listener, handleKeyUp().");
 
-    return true;
+    // ready to start rendering loop
+    startRendering(gl);
 
     }catch(e){
         log("[ERROR] " + e.message);
         alert("[ERROR] " + e.message);
-        return false;
     }
+
+    return true;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
 }
 
 
@@ -317,10 +368,10 @@ function startRendering(gl)
 
     // try to find "requestAnimationFrame" function
     // if it is not available use setTimeout() instead
-    var requestAnimationFrame = getRequestAnimationFrameFunction(window);
-    var timer = new Timer();
+    let requestAnimationFrame = getRequestAnimationFrameFunction(window);
+    let timer = new Timer();
     gl.fps = new FrameRate("fps");
-    var frameCallback = function()
+    let frameCallback = function()
     {
         gl.fps.tick();
         gl.frameTime = timer.getFrameTime();
@@ -346,6 +397,7 @@ function frame()
 
     drawModel();
     drawCrosshair();
+    drawCircle();
 }
 
 
@@ -355,6 +407,7 @@ function frame()
 ///////////////////////////////////////////////////////////////////////////////
 function postFrame()
 {
+    showCameraInfo(gl.camera);
 }
 
 
@@ -372,7 +425,7 @@ function drawModel()
 
     // set view transform
     gl.matrixView = gl.camera.matrix;
-    //gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
 
     // set modelview matrix
     gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
@@ -387,27 +440,19 @@ function drawModel()
     gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
     gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
 
-    // set material
-    //gl.uniform4fv(gl.program.uniform.materialAmbient, gl.material.getAmbient());
-    //gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material.getDiffuse());
-    //gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material.getSpecular());
-    //gl.uniform1f(gl.program.uniform.materialShininess, gl.material.shininess);
-
     // disable texture
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, null);
 
     // draw OBJ
-    if(gl.model.vboVertex && gl.model.vboIndex)
+    if(gl.model.vbo && gl.model.ibo)
     {
-        gl.bindBuffer(gl.ARRAY_BUFFER, gl.model.vboVertex);
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.model.vbo);
         gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
-        gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, gl.model.vboVertex.normalOffset);
-        //gl.vertexAttribPointer(gl.program.attribute.vertexColor, 4, gl.FLOAT, false, 0, gl.model.vboVertex.colorOffset);
+        gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, gl.model.vbo.normalOffset);
 
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.model.vboIndex);
-        gl.drawElements(gl.TRIANGLES, gl.model.vboIndex.indexCount, gl.UNSIGNED_SHORT, 0);
-        //log(gl.model.vboIndex.indexCount);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.model.ibo);
+        gl.drawElements(gl.TRIANGLES, gl.model.ibo.indexCount, gl.UNSIGNED_SHORT, 0);
     }
 }
 
@@ -434,7 +479,7 @@ function drawCrosshair()
 
     // draw crosshair
     var r = gl.model.radius;
-    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([1.0, 0.5, 0, 1]));
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([0.7, 0.7, 0.7, 1]));
     gl.line.draw(-r, 0, 0, r, 0, 0);
     gl.line.draw(0, -r, 0, 0, r, 0);
 }
@@ -442,75 +487,39 @@ function drawCrosshair()
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// print WebGL RC info
-///////////////////////////////////////////////////////////////////////////////
-function logWebGL(gl)
+function drawCircle()
 {
-    log("===== WebGL Info =====");
-    log("   Version: " + gl.getParameter(gl.VERSION));
-    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
-    log("    Vendor: " + gl.getParameter(gl.VENDOR));
-    log("  Renderer: " + gl.getParameter(gl.RENDERER));
-    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
-    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
-    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
-    log("Extentions: " + gl.getSupportedExtensions());
-    log();
-}
+    // set active program
+    gl.program = gl.shaderPrograms["flat"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
 
+    let mat = new Matrix4();
 
+    // on x-y plane
+    gl.uniform1i(gl.program.uniform.matrixComputed, false, false);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, mat.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([0.3, 0.3, 1, 1]));
+    gl.circle.draw(gl);
 
-///////////////////////////////////////////////////////////////////////////////
-// register event handlers to canvas
-///////////////////////////////////////////////////////////////////////////////
-function registerEventHandlers(canvas)
-{
-    // register event handlers
-    window.addEventListener("resize",  handleResize, false);
-    log("Added window resize event listener, handleResize().");
+    // on x-z plane
+    mat.identity().rotateX(Math.PI * 0.5);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, mat.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([0.3, 1, 0.3, 1]));
+    gl.circle.draw(gl);
 
-    window.addEventListener("keydown", handleKeyDown, false);
-    log("Added window keydown event listener, handleKeyDown().");
-
-    window.addEventListener("keyup", handleKeyUp, false);
-    log("Added window keyup event listener, handleKeyUp().");
-
-    canvas.addEventListener("mousemove", handleMouseMove, false);
-    log("Added canvas mousemove event listener, handleMouseMove().");
-
-    canvas.addEventListener("mousedown", handleMouseDown, false);
-    log("Added canvas mousedown event listener, handleMouseDown().");
-
-    canvas.addEventListener("mouseup", handleMouseUp, false);
-    log("Added canvas mouseup event listener, handleMouseUp().");
-
-    canvas.addEventListener("click", handleClick, false);
-    log("Added canvas click event listener, handleClick().");
-
-    canvas.addEventListener("mouseover", handleMouseOver, false);
-    log("Added canvas mouseover event listener, handleMouseOver().");
-
-    canvas.addEventListener("mouseout", handleMouseOut, false);
-    log("Added canvas mouseout event listener, handleMouseOut().");
-
-    canvas.addEventListener("contextmenu", handleContextMenu, false);
-    log("Added canvas contextmenu event listener, handleContextMenu().");
-
-    canvas.addEventListener("wheel", handleWheel, false);
-    log("Added canvas wheel event listeners, handleWheel()");
-
-    // canvas touch events
-    canvas.addEventListener("touchstart", handleTouchStart, false);
-    log("Added canvas touchstart event listeners, handleTouchStart()");
-
-    canvas.addEventListener("touchend", handleTouchEnd, false);
-    log("Added canvas touchend event listeners, handleTouchEnd()");
-
-    canvas.addEventListener("touchmove", handleTouchMove, false);
-    log("Added canvas touchmove event listeners, handleTouchMove()");
-
-    canvas.addEventListener("touchcancel", handleTouchCancel, false);
-    log("Added canvas touchcancel event listeners, handleTouchCancel()");
+    // on y-z plane
+    mat.identity().rotateY(Math.PI * 0.5);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, mat.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([1, 0.3, 0.3, 1]));
+    gl.circle.draw(gl);
 }
 
 
@@ -520,14 +529,12 @@ function registerEventHandlers(canvas)
 ///////////////////////////////////////////////////////////////////////////////
 function handleResize()
 {
-    // get the client dimension of whole window
+    // resize window to fit to parent
     gl.canvas.width = gl.canvas.parentNode.clientWidth;
     gl.canvas.height = gl.canvas.parentNode.clientHeight;
-    //log("parent OFFSET resized: " + gl.canvas.parentNode.offsetWidth + " x " + gl.canvas.parentNode.offsetHeight);
 
-    // reset viewport and projection matrix
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-    gl.matrixProjection = Matrix4.makePerspective(FOV_V, gl.canvas.width/gl.canvas.height, gl.nearPlane, gl.farPlane);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, gl.nearPlane, gl.farPlane);
 
     log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
 }
@@ -537,149 +544,167 @@ function handleResize()
 ///////////////////////////////////////////////////////////////////////////////
 // handlers for mouse event
 ///////////////////////////////////////////////////////////////////////////////
-function handleMouseMove(e)
-{
-    const SCALE_ANGLE = 0.2;
-    const DEG2RAD = Math.PI / 180;
-
-    // get current mouse position
-    var offset = getElementOffset(this);
-    var mouseX = e.clientX - offset.x;
-    var mouseY = e.clientY - offset.y;
-    var deltaX = mouseX - gl.mouse.x;
-    var deltaY = mouseY - gl.mouse.y;
-    gl.mouse.x = mouseX;
-    gl.mouse.y = mouseY;
-    //log("mouse:" + mouseX + ", " + mouseY + "   " + "delta:" + deltaX + ", " + deltaY);
-
-    // rotate camera
-    if(gl.mouse.leftDown)
-    {
-        var delta = new Vector2();
-        delta.x = (gl.mouse.y - gl.mouse.downY) * SCALE_ANGLE;
-        delta.y = (gl.mouse.x - gl.mouse.downX) * SCALE_ANGLE;
-
-        var quat = Quaternion.toQuaternionFromAngles(delta.x * DEG2RAD * 0.5, delta.y * DEG2RAD * 0.5);
-        quat.multiply(gl.camera.downQuaternion);
-        gl.camera.rotateTo(quat, ANIM_DURATION, AnimationMode.EASE_OUT, showCameraInfo);
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
-
-        /*
-        var angle = new Vector3();
-        angle.x = gl.camera.downAngle.x + delta.x;
-        angle.y = gl.camera.downAngle.y - delta.y; // must negate pitch
-        gl.camera.rotateTo(angle, ANIM_DURATION, AnimationMode.EASE_OUT);
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
-        */
-    }
-
-    // pan camera
-    if(gl.mouse.rightDown)
-    {
-        var scale = gl.model.radius * 0.01;
-        var delta = new Vector2(deltaX * scale, deltaY * scale);
-        //gl.camera.shift(delta);
-        gl.camera.shift(delta, ANIM_DURATION, AnimationMode.EASE_OUT, showCameraInfo);
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
-    }
-    //log(gl.mouse.toString());
-}
-
 function handleWheel(e)
 {
-    //log("wheel: " + e.deltaX + ", " + e.deltaY + ", " + e.deltaZ + ", " + e.deltaMode);
-    const ZOOM_SCALE = 0.001;
-    //log("wheel: " + e.deltaY);
+    const ZOOM_SCALE = 0.1;
 
     // positive deltaY = wheel down
     // negative deltaY = wheel up
     if(e.deltaY != 0)
     {
-        var deltaDistance = -e.deltaY * gl.model.radius * 0.2;
+        var deltaDistance = -e.deltaY * gl.model.radius * ZOOM_SCALE;
         if((gl.camera.distance - deltaDistance) < gl.nearPlane)
             deltaDistance = gl.camera.distance - gl.nearPlane;
         else if((gl.camera.distance - deltaDistance) > gl.farPlane)
             deltaDistance = gl.camera.distance - gl.farPlane;
 
+        //gl.camera.moveForward(deltaDistance);
         gl.camera.moveForward(deltaDistance, ANIM_DURATION, AnimationMode.EASE_OUT);
-        //gl.camera.moveForward(delta);
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
     }
 
     e.preventDefault();
-}
-
-function handleMouseDown(e)
-{
-    // remember mouse position when mouse down
-    var offset = getElementOffset(this);
-    gl.mouse.downX = e.clientX - offset.x;
-    gl.mouse.downY = e.clientY - offset.y;
-    gl.mouse.x = gl.mouse.downX;
-    gl.mouse.y = gl.mouse.downY;
-    //log("down: " + gl.mouse.downX + ", " + gl.mouse.downY);
-
-    // remember previous angle and quaternion when mouse down
-    gl.camera.downAngle = gl.camera.angle.clone();
-    gl.camera.downQuaternion = gl.camera.quaternion.clone();
-
-    //e = e || window.event; // hack for IE
-    if("which" in e)
-    {
-        switch(e.which)
-        {
-            case 1: gl.mouse.leftDown = true;   break;
-            case 2: gl.mouse.middleDown = true; break;
-            case 3: gl.mouse.rightDown = true;  break;
-        }
-    }
-    else if("button" in e) // for IE
-    {
-        if(e.button & 1) gl.mouse.leftDown = true;
-        if(e.button & 2) gl.mouse.rightDown = true;
-        if(e.button & 4) gl.mouse.middleDown = true;
-    }
-
-    e.preventDefault(); // disable context menu
-}
-
-function handleMouseUp(e)
-{
-    //e = e || window.event; // hack for IE
-    if("which" in e)
-    {
-        switch(e.which)
-        {
-            case 1: gl.mouse.leftDown = false;      break;
-            case 2: gl.mouse.middleDown = false;    break;
-            case 3: gl.mouse.rightDown = false;     break;
-        }
-    }
-    else if("button" in e) // for IE
-    {
-        if(e.button & 1) gl.mouse.leftDown = false;
-        if(e.button & 2) gl.mouse.rightDown = false;
-        if(e.button & 4) gl.mouse.middleDown = false;
-    }
 }
 
 function handleClick(e)
 {
 }
 
-function handleMouseOver(e)
-{
-}
-
-function handleMouseOut(e)
-{
-    gl.mouse.leftDown = false;
-    gl.mouse.rightDown = false;
-}
-
 function handleContextMenu(e)
 {
     e.preventDefault(); // disable context menu
+}
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handle pointer events: input is PointerEvent object
+///////////////////////////////////////////////////////////////////////////////
+function handlePointerDown(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    let offset = getElementOffset(this);    // get canvas offset
+    gl.pointers.push(copyPointer(pe, offset));
+
+    // remember down pointer and angles when pointer down
+    if(gl.pointers.length == 1)
+    {
+        gl.pointers.downs = []; // clear
+        gl.pointers.downs.push(copyPointer(pe, offset));
+        // handle right mouse button(0=left, 2=right)
+        gl.pointers[0].button = pe.button;
+
+        // remember previous angle and quaternion when pointer down
+        gl.camera.downAngle = gl.camera.angle.clone();
+        gl.camera.downQuaternion = gl.camera.quaternion.clone();
+    }
+    else if(gl.pointers.length == 2)
+    {
+        // remember second pointer
+        gl.pointers.downs.push(copyPointer(pe, offset));
+    }
+}
+
+function handlePointerUp(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    // get array index matching from gl.pointers
+    let index = gl.pointers.findIndex(pointer => pointer.id == pe.pointerId);
+    if(index >= 0) // found
+    {
+        gl.pointers.splice(index, 1);   // remove it
+        gl.pointers.distance = 0;       // clear
+    }
+}
+
+function handlePointerMove(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    // get the current moving pointer and replace it in the array
+    let offset = getElementOffset(this);    // get canvas offset
+    let index = gl.pointers.findIndex(p => p.id == pe.pointerId);
+    if(index >= 0)
+    {
+        // remember delta movement
+        gl.pointers[index].delta = new Vector2((pe.pageX - offset.x) - gl.pointers[index].x, (pe.pageY - offset.y) - gl.pointers[index].y);
+        // update
+        gl.pointers[index].x = pe.pageX - offset.x;
+        gl.pointers[index].y = pe.pageY - offset.y;
+    }
+
+    // if 2 pointers, perform zoom
+    if(gl.pointers.length == 2)
+    {
+        const SCALE_ZOOM = 0.1;
+
+        let d1 = gl.pointers[0].delta.normalize();
+        let d2 = gl.pointers[1].delta.normalize();
+        let dir = d1.add(d2).normalize();   // sum vector of 2 delta vectors
+        let v = new Vector2(gl.pointers[1].x - gl.pointers[0].x, gl.pointers[1].y - gl.pointers[0].y);
+        let dist = v.length();              // distance of 2 vectors
+
+        // zoom camera if opposite direction
+        let deltaDistance = 0;
+        if(gl.pointers.distance > 0)
+            deltaDistance = dist - gl.pointers.distance;
+        gl.pointers.distance = dist;     // remember
+
+        //gl.camera.moveForward(deltaDistance * SCALE_ZOOM);
+        gl.camera.moveForward(deltaDistance * SCALE_ZOOM, ANIM_DURATION, AnimationMode.EASE_OUT);
+    }
+
+    // if 1 down, perform rotate or shift
+    else if(gl.pointers.length == 1)
+    {
+        const SCALE_ROTATE = 0.005;
+        const SCALE_SHIFT = 0.1;
+        const DEG2RAD = Math.PI / 180;
+
+        // shift if dragging right mouse button
+        if(pe.pointerType == "mouse" && gl.pointers[0].button == 2)
+        {
+            let delta = gl.pointers[0].delta.normalize();
+            delta = delta.scale(SCALE_SHIFT);
+
+            //gl.camera.shift(delta);
+            gl.camera.shift(delta, ANIM_DURATION, AnimationMode.EASE_OUT);
+        }
+        // rotate if dragging left mouse button
+        else
+        {
+            let delta = new Vector2();
+            delta.x = (gl.pointers[0].y - gl.pointers.downs[0].y) * SCALE_ROTATE;
+            delta.y = (gl.pointers[0].x - gl.pointers.downs[0].x) * SCALE_ROTATE;
+
+            let quat = Quaternion.toQuaternionFromAngles(delta.x * 0.5, delta.y * 0.5);
+            quat.multiply(gl.camera.downQuaternion);
+
+            // update camera
+            //gl.camera.rotateTo(quat);
+            gl.camera.rotateTo(quat, ANIM_DURATION, AnimationMode.EASE_OUT);
+        }
+    }
+}
+
+function handlePointerCancel(pe)
+{
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
+}
+
+function handlePointerLeave(pe)
+{
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
+}
+
+function copyPointer(pe, offset={x:0,y:0})
+{
+    // return pointer data
+    return {id:pe.pointerId, x:pe.clientX - offset.x, y:pe.clientY - offset.y};
 }
 
 
@@ -690,10 +715,9 @@ function handleContextMenu(e)
 function handleKeyDown(e)
 {
     //log("key down: " + e.keyCode);
-
-    var speed = gl.model.radius * 0.5;
-    var accel = speed * 4;
-    var shiftVector = new Vector2(0, 0);
+    let speed = gl.model.radius * 0.5;
+    let accel = speed * 4;
+    let shiftVector = new Vector2(0, 0);
 
     e = e || window.event;
     switch(e.keyCode)
@@ -735,7 +759,6 @@ function handleKeyDown(e)
 function handleKeyUp(e)
 {
     //log("key up: " + e.keyCode);
-
     e = e || window.event;
     switch(e.keyCode)
     {
@@ -744,156 +767,13 @@ function handleKeyUp(e)
     case 39:    // right
     case 40:    // down
         gl.camera.stopShift();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
         break;
 
     case 61:    // +(=)
-    case 173:    // -(_)
+    case 173:   // -(_)
         gl.camera.stopForward();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
         break;
     }
-}
-
-
-
-///////////////////////////////////////////////////////////////////////////////
-// handle touch events
-///////////////////////////////////////////////////////////////////////////////
-function handleTouchStart(e)
-{
-    log("touch start: " + e.changedTouches.length + ", " + gl.touches.length);
-    e.preventDefault(); // prevent touch event being delivered
-
-    // remember angles when touch started
-    gl.camera.touchAngle = gl.camera.angle.clone();
-
-    // remember all touch data when touch started
-    let touches = e.changedTouches;
-    for(let i = 0; i < touches.length; ++i)
-    {
-        gl.touches.push(copyTouch(touches[i]));
-        gl.touches.distance = 0;
-    }
-
-    if(gl.touches.length == 1)
-        gl.touches.downTouch = copyTouch(gl.touches[0]);
-}
-
-function handleTouchEnd(e)
-{
-    log("touch end: " + e.changedTouches.length + ", " + gl.touches.length);
-    e.preventDefault();
-
-    // remove ended touch object from array
-    let touches = e.changedTouches;
-    for(let i = 0; i < touches.length; ++i)
-    {
-        let index = findTouchIndex(touches[i]);
-        if(index >= 0) // found
-            gl.touches.splice(index, 1);    // remove it
-    }
-
-    // if there is still touch object, update the first touch object for rotation
-    if(gl.touches.length > 0)
-        gl.touches.downTouch = copyTouch(gl.touches[0]);
-}
-
-function handleTouchMove(e)
-{
-    e.preventDefault();
-
-    // get 2 touch objects for camera pannng and zoom effects
-    let touch1, touch2; // current touches
-    let touches = e.changedTouches;
-    for(let i = 0; i < touches.length; ++i)
-    {
-        //log("Touch Moved:" + findTouchIndex(touches[i]));
-        let index = findTouchIndex(touches[i]);
-        if(index == 0)
-            touch1 = touches[i];
-        else if(index == 1)
-            touch2 = touches[i];
-    }
-
-    // if 2 touches, perform pan/zoom
-    if(gl.touches.length == 2)
-    {
-        // pan camera
-        let v1 = new Vector2(touch1.pageX - gl.touches[0].pageX, touch1.pageY - gl.touches[0].pageY);
-        let v2 = new Vector2(touch2.pageX - gl.touches[1].pageX, touch2.pageY - gl.touches[1].pageY);
-        let dir = v1.add(v2).scale(0.5);
-        gl.touches[0].pageX = touch1.pageX;
-        gl.touches[0].pageY = touch1.pageY;
-        gl.touches[1].pageX = touch2.pageX;
-        gl.touches[1].pageY = touch2.pageY;
-
-        // shift (pan) camera
-        const SCALE = 1.0;
-        let delta = new Vector2(dir.x * SCALE, dir.y * SCALE);
-        gl.camera.shift(delta, ANIM_DURATION, AnimationMode.EASE_OUT, showCameraInfo);
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
-
-        // zoom camera
-        let v = new Vector2(touch2.pageX - touch1.pageX, touch2.pageY - touch1.pageY);
-        let dist = v.length();
-        delta = 0;
-        if(gl.touches.distance > 0)
-            delta = 0.001 * gl.camera.zoomScale * (dist - gl.touches.distance);
-        gl.touches.distance = dist;     // remember
-
-        let near = gl.nearPlane * NEAR_FACTOR;
-        let deltaDistance = delta * gl.camera.zoomScale;
-        if((gl.camera.distance - deltaDistance) < near)
-            deltaDistance = gl.camera.distance - near;
-        else if((gl.camera.distance - deltaDistance) > (gl.farPlane - 1000))
-            deltaDistance = gl.camera.distance - (gl.farPlane - 1000);
-
-        //gl.camera.moveForward(deltaDistance);
-        gl.camera.moveForward(deltaDistance, ANIM_DURATION, AnimationMode.EASE_OUT, showCameraInfo);
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
-
-        // reset selection
-        gl.selectBuffer.invalid = true;
-        unfocus();
-    }
-    // if 1 touch, perform rotate
-    else if(gl.touches.length == 1)
-    {
-        const SCALE_ROTATE = 0.5;
-        let angle = new Vector3();
-        angle.x = gl.camera.touchAngle.x + (touch1.pageY - gl.touches.downTouch.pageY) * SCALE_ROTATE;
-        angle.y = gl.camera.touchAngle.y - (touch1.pageX - gl.touches.downTouch.pageX) * SCALE_ROTATE;
-        gl.camera.rotateTo(angle, ANIM_DURATION, AnimationMode.EASE_OUT, showCameraInfo);
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
-
-        // update position
-        //gl.touches[0].pageX = touch1.pageX;
-        //gl.touches[0].pageY = touch1.pageY;
-    }
-}
-
-function handleTouchCancel(e)
-{
-    gl.touches.length = 0;  // clear
-    //log("Touch canceled.");
-}
-
-function copyTouch(touch)
-{
-    // return touch data
-    return {identifier:touch.identifier, pageX:touch.pageX, pageY:touch.pageY};
-}
-
-function findTouchIndex(touch)
-{
-    // find touch object with same id
-    for(var i = 0; i < gl.touches.length; ++i)
-    {
-        if(touch.identifier == gl.touches[i].identifier)
-            return i;
-    }
-    return -1;
 }
 
 
@@ -903,7 +783,7 @@ function findTouchIndex(touch)
 ///////////////////////////////////////////////////////////////////////////////
 function initGL(gl)
 {
-    gl.clearColor(1.0, 1.0, 1.0, 0.0);
+    gl.clearColor(0, 0, 0, 0.0);
     gl.clearDepth(1.0);
     gl.enable(gl.DEPTH_TEST);   // enable depth test
     gl.depthFunc(gl.LEQUAL);
@@ -913,7 +793,6 @@ function initGL(gl)
 
     // default light
     gl.light = new Light(0, 0, 1, 0);
-    //gl.light.position.normalize(); //@@ fix normalize()
     gl.light.color.set(1.0, 1.0, 1.0, 1.0);        // light color
     gl.light.attenuations.set(1, 0.0, 0); // attenuations (constant, linear, quad)
     log("    Light Position: " + gl.light.position);
@@ -934,7 +813,6 @@ function initGL(gl)
 
     // init camera with position and target
     gl.camera = new OrbitCamera(0, 0, CAMERA_DIST, 0, 0, 0);
-    gl.camera.angleUsed = true;     // use angle for rotation
     log("Created an orbit camera.");
     log(gl.camera);
 
@@ -957,14 +835,14 @@ function initGL(gl)
 ///////////////////////////////////////////////////////////////////////////////
 function initGLSL(gl)
 {
-    // enable all vertexAttribArray
+    // enable all vertex attrib arrays
     initVertexAttribArrays(gl);
 
     // load shaders
     gl.shaderPrograms = {}; // associative array
 
     // load phong shader
-    createShaderProgram(gl, GLSL_PATH+"gles_phong.vert", GLSL_PATH+"gles_phong.frag").then(function(program)
+    createShaderProgram(gl, GLSL_PATH+"gles_phong.vert", GLSL_PATH+"gles_phong.frag").then(program =>
     {
         gl.useProgram(program);
 
@@ -980,29 +858,8 @@ function initGLSL(gl)
         gl.shaderPrograms["phong"] = program;
     });
 
-    // load gooch shader
-    createShaderProgram(gl, GLSL_PATH+"gles_gooch.vert", GLSL_PATH+"gles_gooch.frag").then(function(program)
-    {
-        gl.useProgram(program);
-
-        // setup uniforms
-        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
-        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
-        gl.uniform4fv(program.uniform.lightColor, gl.light.getColor());
-        //gl.uniform4fv(program.uniform.materialAmbient, gl.material.getAmbient());
-        gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
-        //gl.uniform4fv(program.uniform.materialSpecular, gl.material.getSpecular());
-        //gl.uniform1f(program.uniform.materialShininess, gl.material.shininess);
-        gl.uniform4fv(program.uniform.warmColor, new Float32Array([1.0, 1.0, 0.0, 1]));
-        gl.uniform4fv(program.uniform.coolColor, new Float32Array([0.0, 0.0, 1.0, 1]));
-        gl.uniform1f(program.uniform.warmWeight, 0.5);
-        gl.uniform1f(program.uniform.coolWeight, 0.5);
-
-        gl.shaderPrograms["gooch"] = program;
-    });
-
     // load flat shader
-    createShaderProgram(gl, GLSL_PATH+"gles_flat.vert", GLSL_PATH+"gles_flat.frag").then(function(program)
+    createShaderProgram(gl, GLSL_PATH+"gles_flat.vert", GLSL_PATH+"gles_flat.frag").then(program =>
     {
         gl.useProgram(program);
 
@@ -1033,129 +890,117 @@ function initHtmlElements()
     // camera controls
     // events for camera navigation controlls
     gl.dom.camShiftL = document.getElementById("camShiftL");
-    gl.dom.camShiftL.addEventListener("mousedown", function()
+    gl.dom.camShiftL.addEventListener("pointerdown", () =>
     {
         gl.camera.startShift(new Vector2(gl.model.radius*0.5, 0), gl.model.radius*2);
     }, false);
-    gl.dom.camShiftL.addEventListener("mouseup", function()
+    gl.dom.camShiftL.addEventListener("pointerup", () =>
     {
         gl.camera.stopShift();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
     }, false);
-    gl.dom.camShiftL.addEventListener("mouseout", function()
+    gl.dom.camShiftL.addEventListener("pointerleave", () =>
     {
         gl.camera.stopShift();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
     }, false);
 
     gl.dom.camShiftR = document.getElementById("camShiftR");
-    gl.dom.camShiftR.addEventListener("mousedown", function()
+    gl.dom.camShiftR.addEventListener("pointerdown", () =>
     {
         gl.camera.startShift(new Vector2(-gl.model.radius*0.5, 0), gl.model.radius*2);
     }, false);
-    gl.dom.camShiftR.addEventListener("mouseup", function()
+    gl.dom.camShiftR.addEventListener("pointerup", () =>
     {
         gl.camera.stopShift();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
     }, false);
-    gl.dom.camShiftR.addEventListener("mouseout", function()
+    gl.dom.camShiftR.addEventListener("pointerleave", () =>
     {
         gl.camera.stopShift();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
     }, false);
 
     gl.dom.camShiftU = document.getElementById("camShiftU");
-    gl.dom.camShiftU.addEventListener("mousedown", function()
+    gl.dom.camShiftU.addEventListener("pointerdown", () =>
     {
         gl.camera.startShift(new Vector2(0, gl.model.radius*0.5), gl.model.radius*2);
     }, false);
-    gl.dom.camShiftU.addEventListener("mouseup", function()
+    gl.dom.camShiftU.addEventListener("pointerup", () =>
     {
         gl.camera.stopShift();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
     }, false);
-    gl.dom.camShiftU.addEventListener("mouseout", function()
+    gl.dom.camShiftU.addEventListener("pointerleave", () =>
     {
         gl.camera.stopShift();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
     }, false);
 
     gl.dom.camShiftD = document.getElementById("camShiftD");
-    gl.dom.camShiftD.addEventListener("mousedown", function()
+    gl.dom.camShiftD.addEventListener("pointerdown", () =>
     {
         gl.camera.startShift(new Vector2(0, -gl.model.radius*0.5), gl.model.radius*2);
     }, false);
-    gl.dom.camShiftD.addEventListener("mouseup", function()
+    gl.dom.camShiftD.addEventListener("pointerup", () =>
     {
         gl.camera.stopShift();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
     }, false);
-    gl.dom.camShiftD.addEventListener("mouseout", function()
+    gl.dom.camShiftD.addEventListener("pointerleave", () =>
     {
         gl.camera.stopShift();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
     }, false);
 
     gl.dom.camForward = document.getElementById("camForward");
-    gl.dom.camForward.addEventListener("mousedown", function()
+    gl.dom.camForward.addEventListener("pointerdown", () =>
     {
         gl.camera.startForward(gl.model.radius*0.5, gl.model.radius*2);
     }, false);
-    gl.dom.camForward.addEventListener("mouseup", function()
+    gl.dom.camForward.addEventListener("pointerup", () =>
     {
         gl.camera.stopForward();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
     }, false);
-    gl.dom.camForward.addEventListener("mouseout", function()
+    gl.dom.camForward.addEventListener("pointerleave", () =>
     {
         gl.camera.stopForward();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
     }, false);
 
     gl.dom.camBackward = document.getElementById("camBackward");
-    gl.dom.camBackward.addEventListener("mousedown", function()
+    gl.dom.camBackward.addEventListener("pointerdown", () =>
     {
         gl.camera.startForward(-gl.model.radius*0.5, gl.model.radius*2);
     }, false);
-    gl.dom.camBackward.addEventListener("mouseup", function()
+    gl.dom.camBackward.addEventListener("pointerup", () =>
     {
         gl.camera.stopForward();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
     }, false);
-    gl.dom.camBackward.addEventListener("mouseout", function()
+    gl.dom.camBackward.addEventListener("pointerleave", () =>
     {
         gl.camera.stopForward();
-        setTimeout(showCameraInfo, ANIM_DURATION, gl.camera);
     }, false);
 
     gl.dom.camReset = document.getElementById("camReset");
     gl.dom.camReset.addEventListener("click", resetCamera, false);
 
     gl.dom.camFront = document.getElementById("camFront");
-    gl.dom.camFront.addEventListener("click", function()
+    gl.dom.camFront.addEventListener("click", () =>
     {
-        var q = Quaternion.toQuaternionFromAngles(0, 0);
+        let q = Quaternion.toQuaternionFromAngles(0, 0);
         gl.camera.rotateTo(q, 500, AnimationMode.EASE_IN_OUT);
     });
 
     gl.dom.camFront = document.getElementById("camBack");
-    gl.dom.camFront.addEventListener("click", function()
+    gl.dom.camFront.addEventListener("click", () =>
     {
-        var q = Quaternion.toQuaternionFromAngles(0, Math.PI/180*90);
+        let q = Quaternion.toQuaternionFromAngles(0, Math.PI/180*90);
         gl.camera.rotateTo(q, 500, AnimationMode.EASE_IN_OUT);
     });
 
     gl.dom.camFront = document.getElementById("camLeft");
-    gl.dom.camFront.addEventListener("click", function()
+    gl.dom.camFront.addEventListener("click", () =>
     {
-        var q = Quaternion.toQuaternionFromAngles(0, -Math.PI/180*45);
+        let q = Quaternion.toQuaternionFromAngles(0, -Math.PI/180*45);
         gl.camera.rotateTo(q, 500, AnimationMode.EASE_IN_OUT);
     });
 
     gl.dom.camFront = document.getElementById("camRight");
-    gl.dom.camFront.addEventListener("click", function()
+    gl.dom.camFront.addEventListener("click", () =>
     {
-        var q = Quaternion.toQuaternionFromAngles(0, Math.PI/180*45);
+        let q = Quaternion.toQuaternionFromAngles(0, Math.PI/180*45);
         gl.camera.rotateTo(q, 500, AnimationMode.EASE_IN_OUT);
     });
 }
@@ -1175,8 +1020,6 @@ function resetCamera()
 
     var t = gl.model.center;
     gl.camera.shiftTo(t, 1000, AnimationMode.EASE_OUT);
-
-    setTimeout(showCameraInfo, 1000, gl.camera);
 }
 
 
@@ -1198,9 +1041,6 @@ function showCameraInfo(cam)
     gl.dom.camQuaternion.textContent = "Quaternion: (" + v.s.toFixed(3) + ", " + v.x.toFixed(3) + ", " + v.y.toFixed(3) + ", " + v.z.toFixed(3) + ")";
 }
 
-
-
-// ]]>
 </script>
 
 </head>
@@ -1211,13 +1051,12 @@ function showCameraInfo(cam)
 <div class="contentblock">
 
 <!-- WebGL container ========================================================== -->
-<div class="webglblock">
-<canvas id="webglView">
+<div class="mainblock">
+<canvas id="webglView" width="300" height="300">
 </canvas>
-
-<div id="fps">
-FPS: 0
-</div>
+<pre id="info">
+<div id="fps">0 FPS</div>
+</pre>
 
 <!-- camera buttons -->
 <div class="camWrap noselect">
@@ -1236,9 +1075,9 @@ FPS: 0
 </div> <!-- end of camWrap -->
 
 <div class="camInfo">
-<h4>
-Orbit Camera
-</h4>
+<h3>
+WebGL Orbit Camera
+</h3>
 <div id="camPosition">
 Position:
 </div>
@@ -1257,10 +1096,7 @@ Quaternion:
 </div>
 
 </div>
-<!-- end of WebGL container -->
-
-
-
+<!-- end of main block -->
 
 </div> <!-- end of contentblock -->
 

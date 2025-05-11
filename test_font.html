@@ -377,6 +377,9 @@ function drawTexts()
     gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([0.1,0.3,1,1]));
     gl.font.drawText("1234567890", 1, 1, -1);
 
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([0.0,0.0,0.0,1]));
+    gl.font.drawText("Bitmap Font", -1, 1, -1);
+
     //gl.disable(gl.BLEND);
     //gl.enable(gl.DEPTH_TEST);
 }
@@ -751,7 +754,15 @@ function initHtml()
         let fontPreview = document.getElementById("fontPreview");
         let img = new Image();
         img.src = "files/fonts/" + comboFont.value + ".png";
-        img.onload = () => fontPreview.src = img.src;
+        img.onload = () => {
+            fontPreview.src = img.src;
+            let fontDim = document.getElementById("fontDim");
+            fontDim.innerText = img.width + " x " + img.height;
+            let aw = document.getElementById("widthA");
+            let ah = document.getElementById("heightA");
+            aw.innerText = gl.font.getTextWidth("A").toFixed(3);
+            ah.innerText = (gl.font.height * gl.font.scale[1]).toFixed(3);
+        };
     });
 
     let fontScale = document.form1.fontScale;
@@ -759,10 +770,14 @@ function initHtml()
     fontScale.addEventListener("input", () =>
     {
         let scale = parseFloat(fontScale.value);
-        console.log(fontScale.value);
         gl.font.setScale(scale, scale);
         let labelFontScale = document.getElementById("labelFontScale");
         labelFontScale.innerText = fontScale.value;
+
+        let aw = document.getElementById("widthA");
+        let ah = document.getElementById("heightA");
+        aw.innerText = gl.font.getTextWidth("A").toFixed(3);
+        ah.innerText = (gl.font.height * gl.font.scale[1]).toFixed(3);
     });
 }
 
@@ -803,8 +818,15 @@ WebGL Bitmap Font
 </div>
 </form>
 
+<br>
+<p style="font-size:12px">
+<strong>Width of "A"</strong>: <span id="widthA">0</span>
+<br>
+<strong>Height of "A"</strong>: <span id="heightA">0</span>
+</p>
+
 <h3>
-Bitmap Preview:
+Bitmap Preview: <span id="fontDim">512 x 512</span>
 </h3>
 <img id="fontPreview" src="files/fonts/arial48.png">
 <br>
