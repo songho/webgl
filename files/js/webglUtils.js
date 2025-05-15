@@ -9,7 +9,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2011-03-01
-// UPDATED: 2025-04-16
+// UPDATED: 2025-05-14
 ///////////////////////////////////////////////////////////////////////////////
 
 // default 1x1 texture data
@@ -1017,4 +1017,58 @@ function sampleVertices(vertices, n)
         samples[j+2] = vertices[k+2];
     }
     return samples;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// generate tangents for normalmap from vertices and texture coords
+///////////////////////////////////////////////////////////////////////////////
+function generateTangents(vertices, texCoords, indices)
+{
+    let tangents = new Float32Array(vertices.length);
+
+    let count = indices.length;
+    for(let i = 0; i < count; i += 3)
+    {
+        // edge vectors
+        let vi1 = indices[i] * 3;
+        let vi2 = indices[i + 1] * 3;
+        let vi3 = indices[i + 2] * 3;
+        let e1 = new Vector3(vertices[vi2] - vertices[vi1], vertices[vi2+1] - vertices[vi1+1], vertices[vi2+2] - vertices[vi1+2]);
+        let e2 = new Vector3(vertices[vi3] - vertices[vi1], vertices[vi3+1] - vertices[vi1+1], vertices[vi3+2] - vertices[vi1+2]);
+        //console.log("VI: " + vi1 + ", " + vi2 + ", " + vi3);
+        //console.log("E1: " + e1);
+        //console.log("E2: " + e2);
+
+        // delta texcoords vectors
+        let ti1 = indices[i] * 2;
+        let ti2 = indices[i + 1] * 2;
+        let ti3 = indices[i + 2] * 2;
+        let d1 = new Vector2(texCoords[ti2] - texCoords[ti1], texCoords[ti2+1] - texCoords[ti1+1]);
+        let d2 = new Vector2(texCoords[ti3] - texCoords[ti1], texCoords[ti3+1] - texCoords[ti1+1]);
+        //console.log("TI: " + ti1 + ", " + ti2 + ", " + ti3);
+        //console.log("D1: " + d1);
+        //console.log("D2: " + d2);
+
+        let id = 1 / (d1.x * d2.y - d1.y * d2.x);   // inverse determinent
+
+        let t = new Vector3();
+        t.x = id * (d2.y * e1.x - d1.y * e2.x);
+        t.y = id * (d2.y * e1.y - d1.y * e2.y);
+        t.z = id * (d2.y * e1.z - d1.y * e2.z);
+        t.normalize(t);
+
+        // make perpendicular to face normal: T - (T.N)N
+        //let n = Vector3.cross(e1, e2).normalize();
+        //t = t.subtract(n.clone().scale(t.dot(n)));
+        //console.log(t.dot(n));
+
+        // copy
+        tangents[vi1] = tangents[vi2] = tangents[vi3] = t.x;
+        tangents[vi1+1] = tangents[vi2+1] = tangents[vi3+1] = t.y;
+        tangents[vi1+2] = tangents[vi2+2] = tangents[vi3+2] = t.z;
+    }
+
+    return tangents;
 }
