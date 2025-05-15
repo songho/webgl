@@ -9,8 +9,9 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 6. [Drawing Cube](https://www.songho.ca/webgl/webgl_cube.html): Draw a rotating cube with a texture map and vertex colors
 7. [Drawing Sphere](https://www.songho.ca/webgl/webgl_sphere.html): Draw a sphere with a texture map
 8. [Drawing Bitmap Font](https://www.songho.ca/webgl/webgl_font.html): Draw a bitmap font in 3D
-9. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render an OBJ file using ObjModel.js
-10. [Camera](https://www.songho.ca/webgl/webgl_camera.html): Orbital camera interface using pointer events
+9. [Loading Texture](https://www.songho.ca/webgl/webgl_texture.html): Loading a diffuse texture
+10. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render an OBJ file using ObjModel.js
+11. [Camera](https://www.songho.ca/webgl/webgl_camera.html): Orbital camera interface using pointer events
 
 
 
