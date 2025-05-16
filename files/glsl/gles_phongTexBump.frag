@@ -20,7 +20,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2012-01-11
-// UPDATED: 2015-06-04
+// UPDATED: 2025-05-16
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -58,6 +58,9 @@ void main(void)
     vec3 tangent = normalize(tangentVec);
     vec3 binormal = normalize(binormalVec);
 
+    // TBN matrix
+    mat3 matrixTbn = mat3(tangent, binormal, normal);
+
     // compute light vector and attenuation
     vec3 light;
     float attenuation;
@@ -86,30 +89,16 @@ void main(void)
     // compute view vector (from vertex to camera) in eye space
     vec3 view = normalize(-positionVec);
 
-    // compute view vector in tangent space
-    vec3 tsView;
-    tsView.x = dot(tangent,  view);
-    tsView.y = dot(binormal, view);
-    tsView.z = dot(normal,   view);
+    // compute view vector in tangent space with TBN matrix
+    vec3 tsView = matrixTbn * view;
+
+    // compute light vector in tangent space with TBN matrix
+    vec3 tsLight = matrixTbn * light;
 
     // get normal in tangent space from normal map, then set the range from [0, 1] to [-1, 1]
     vec3 tsNormal = normalize(texture2D(map1, texCoord0).rgb * 2.0 - ONE);
 
-    /*
-    // compute reflect vector in tangent space
-    vec3 tsReflect;
-    tsReflect.x = dot(tangent,  reflectVec);
-    tsReflect.y = dot(binormal, reflectVec);
-    tsReflect.z = dot(normal,   reflectVec);
-    */
-
-    // compute light vector in tangent space with TBN matrix
-    vec3 tsLight;
-    tsLight.x = dot(tangent,  light);
-    tsLight.y = dot(binormal, light);
-    tsLight.z = dot(normal,   light);
-
-    // compute reflected ray vector in eye space: 2 * N * (N dot L) - L
+    // compute reflected ray vector in tangent space: 2 * (N dot L) * N - L
     vec3 tsReflect = reflect(-tsLight, tsNormal);
 
     // start with ambient
