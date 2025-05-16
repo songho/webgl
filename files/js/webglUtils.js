@@ -1022,9 +1022,9 @@ function sampleVertices(vertices, n)
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// generate tangents for normalmap from vertices and texture coords
+// generate tangents for normalmap from vertices, normals and texture coords
 ///////////////////////////////////////////////////////////////////////////////
-function generateTangents(vertices, texCoords, indices)
+function generateTangents(vertices, normals, texCoords, indices)
 {
     let tangents = new Float32Array(vertices.length);
 
@@ -1037,9 +1037,6 @@ function generateTangents(vertices, texCoords, indices)
         let vi3 = indices[i + 2] * 3;
         let e1 = new Vector3(vertices[vi2] - vertices[vi1], vertices[vi2+1] - vertices[vi1+1], vertices[vi2+2] - vertices[vi1+2]);
         let e2 = new Vector3(vertices[vi3] - vertices[vi1], vertices[vi3+1] - vertices[vi1+1], vertices[vi3+2] - vertices[vi1+2]);
-        //console.log("VI: " + vi1 + ", " + vi2 + ", " + vi3);
-        //console.log("E1: " + e1);
-        //console.log("E2: " + e2);
 
         // delta texcoords vectors
         let ti1 = indices[i] * 2;
@@ -1047,9 +1044,6 @@ function generateTangents(vertices, texCoords, indices)
         let ti3 = indices[i + 2] * 2;
         let d1 = new Vector2(texCoords[ti2] - texCoords[ti1], texCoords[ti2+1] - texCoords[ti1+1]);
         let d2 = new Vector2(texCoords[ti3] - texCoords[ti1], texCoords[ti3+1] - texCoords[ti1+1]);
-        //console.log("TI: " + ti1 + ", " + ti2 + ", " + ti3);
-        //console.log("D1: " + d1);
-        //console.log("D2: " + d2);
 
         let id = 1 / (d1.x * d2.y - d1.y * d2.x);   // inverse determinent
 
@@ -1059,15 +1053,18 @@ function generateTangents(vertices, texCoords, indices)
         t.z = id * (d2.y * e1.z - d1.y * e2.z);
         t.normalize(t);
 
-        // make perpendicular to face normal: T - (T.N)N
-        //let n = Vector3.cross(e1, e2).normalize();
-        //t = t.subtract(n.clone().scale(t.dot(n)));
-        //console.log(t.dot(n));
+        // make perpendicular to vertex normal: T - (T.N) * N
+        let n1 = new Vector3(normals[vi1], normals[vi1+1], normals[vi1+2]);
+        let n2 = new Vector3(normals[vi2], normals[vi2+1], normals[vi2+2]);
+        let n3 = new Vector3(normals[vi3], normals[vi3+1], normals[vi3+2]);
+        let t1 = t.clone().subtract(n1.clone().scale(t.dot(n1))).normalize();
+        let t2 = t.clone().subtract(n2.clone().scale(t.dot(n2))).normalize();
+        let t3 = t.clone().subtract(n3.clone().scale(t.dot(n3))).normalize();
 
         // copy
-        tangents[vi1] = tangents[vi2] = tangents[vi3] = t.x;
-        tangents[vi1+1] = tangents[vi2+1] = tangents[vi3+1] = t.y;
-        tangents[vi1+2] = tangents[vi2+2] = tangents[vi3+2] = t.z;
+        tangents[vi1] = t1.x; tangents[vi1+1] = t1.y; tangents[vi1+2] = t1.z;
+        tangents[vi2] = t2.x; tangents[vi2+1] = t2.y; tangents[vi2+2] = t2.z;
+        tangents[vi3] = t3.x; tangents[vi3+1] = t3.y; tangents[vi3+2] = t3.z;
     }
 
     return tangents;
