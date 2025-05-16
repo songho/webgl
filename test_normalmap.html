@@ -6,7 +6,7 @@ test loading normal map
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2013-07-22
-UPDATED: 2025-05-12
+UPDATED: 2025-05-15
 ===============================================================================
 -->
 
@@ -122,7 +122,7 @@ input[type="button"] {
 let gl = null;
 
 // constants
-let CAMERA_Z = 3;
+let CAMERA_Z = 4;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -186,11 +186,14 @@ function initWebGL(canvasId)
     // load texture
     gl.tex0 = loadTexture(gl, "files/images/grid512.png", false);
     gl.tex1 = loadNormalmap(gl, "files/images/grid512_normals.png", false);
+    gl.textureUsed = true;
     gl.normalmapUsed = true;
 
-    // default normalmap (0,0,1)
+    // default textures
     gl.tex2 = gl.createTexture();
-    setupDefaultTexture(gl, gl.tex2, TextureType.NORMALMAP);
+    setupDefaultTexture(gl, gl.tex2, TextureType.TEXTURE);
+    gl.tex3 = gl.createTexture();
+    setupDefaultTexture(gl, gl.tex3, TextureType.NORMALMAP);
 
     // init array of pointer objects
     gl.pointers = [];
@@ -299,12 +302,16 @@ function frame()
 
     // bind texture
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
+    if(gl.textureUsed)
+        gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
+    else
+        gl.bindTexture(gl.TEXTURE_2D, gl.tex2);
+
     gl.activeTexture(gl.TEXTURE1);
     if(gl.normalmapUsed)
         gl.bindTexture(gl.TEXTURE_2D, gl.tex1);
     else
-        gl.bindTexture(gl.TEXTURE_2D, gl.tex2);
+        gl.bindTexture(gl.TEXTURE_2D, gl.tex3);
 
     // draw triangle
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.vbo);
@@ -551,7 +558,7 @@ function initGL(width, height)
     log();
 
     // default material
-    gl.material = new Material(0.8, 0.8, 0.8, 1.0);
+    gl.material = new Material(0.7, 0.7, 0.7, 1.0);
     gl.material.ambient.set(0.3, 0.3, 0.3, 1);
     gl.material.specular.set(0.5, 0.5, 0.5, 1);
     gl.material.shininess = 128;
@@ -877,6 +884,10 @@ function initHtml()
     comboModel.selectedIndex = 0;
     comboModel.addEventListener("change", e => changeModel(comboModel.value));
 
+    let checkTexture = document.form1.checkTexture;
+    checkTexture.checked = gl.normalmapUsed;
+    checkTexture.addEventListener("change", () => gl.textureUsed = checkTexture.checked);
+
     let checkNormalmap = document.form1.checkNormalmap;
     checkNormalmap.checked = gl.normalmapUsed;
     checkNormalmap.addEventListener("change", () => gl.normalmapUsed = checkNormalmap.checked);
@@ -954,6 +965,8 @@ WebGL Normal Map
 <br>
 <br>
 
+<label><input style="margin-bottom:10px;" type="checkbox" id="checkTexture">Enable Texture</label>
+<br>
 <label><input style="margin-bottom:10px;" type="checkbox" id="checkNormalmap">Enable Normalmap</label>
 <br>
 <br>
