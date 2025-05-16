@@ -135,6 +135,17 @@ document.addEventListener("DOMContentLoaded", () =>
         return;
 
     initHtml();
+
+    //@@ testing tangent generation
+    let v = new Float32Array([0,0,0,  -0.5,-0.5,0.5,  0,0,1,
+                              0,0,0,  0,0,1,  0.5,-0.5,0.5]);
+    let n = new Float32Array([0,1,0,  -0.707,0.707,0,  -0.707,0.707,0,
+                              0,1,0, 0.707,0.707,0, 0.707,0.707,0]);
+    let t = new Float32Array([0.5,0,  0,0.5,  0.5,1,
+                              0.5,0,  0.5,1, 1,0.5]);
+    let i = [0,1,2, 3,4,5];
+    let tangents = generateTangents(v, n, t, i);
+    console.log(tangents);
 });
 
 
@@ -571,7 +582,7 @@ function initGL(width, height)
     // init camera
     gl.camera = {};
     gl.camera.target = new Vector3(0, 0, 0);
-    gl.camera.angle = new Vector2(0.2, 0);
+    gl.camera.angle = new Vector2(0.5, 0);
     gl.camera.distance = CAMERA_Z;
 
     gl.nearPlane = 0.1;
@@ -670,7 +681,7 @@ function initCube(gl)
     gl.matrixModel.identity();  // reset matrix
 
     // generate tangents
-    let tangents = generateTangents(vertices, texCoords, indices);
+    let tangents = generateTangents(vertices, normals, texCoords, indices);
     //console.log(tangents);
 
     // create  vertex buffer
@@ -713,7 +724,7 @@ function initSphere(gl)
     gl.matrixModel.rotateX(deg2rad(-90));
 
     // generate tangents
-    let tangents = generateTangents(model.vertices, model.texCoords, model.indices);
+    let tangents = generateTangents(model.vertices, model.normals, model.texCoords, model.indices);
     //console.log(tangents);
 
     // create  vertex buffer
@@ -756,7 +767,7 @@ function initCylinder(gl)
     gl.matrixModel.rotateX(deg2rad(-90));
 
     // generate tangents
-    let tangents = generateTangents(model.vertices, model.texCoords, model.indices);
+    let tangents = generateTangents(model.vertices, model.normals, model.texCoords, model.indices);
     //console.log(tangents);
 
     // create  vertex buffer
@@ -799,7 +810,7 @@ function initCone(gl)
     gl.matrixModel.rotateX(deg2rad(-90));
 
     // generate tangents
-    let tangents = generateTangents(model.vertices, model.texCoords, model.indices);
+    let tangents = generateTangents(model.vertices, model.normals, model.texCoords, model.indices);
     //console.log(tangents);
 
     // create  vertex buffer
@@ -842,7 +853,7 @@ function initTorus(gl)
     gl.matrixModel.rotateX(deg2rad(-90));
 
     // generate tangents
-    let tangents = generateTangents(model.vertices, model.texCoords, model.indices);
+    let tangents = generateTangents(model.vertices, model.normals, model.texCoords, model.indices);
     //console.log(tangents);
 
     // create  vertex buffer
@@ -893,7 +904,6 @@ function initHtml()
     checkNormalmap.addEventListener("change", () => gl.normalmapUsed = checkNormalmap.checked);
 
     let radioNormalmap = document.form1.normalmap;
-    console.log(radioNormalmap);
     radioNormalmap.value = "grid512_normals.png";
     radioNormalmap.forEach(radio =>
     {
