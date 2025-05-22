@@ -11,8 +11,10 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 8. [Drawing Bitmap Font](https://www.songho.ca/webgl/webgl_font.html): Draw a bitmap font in 3D
 9. [Loading Texture](https://www.songho.ca/webgl/webgl_texture.html): Loading a diffuse texture
 10. [Loading Normal Map](https://www.songho.ca/webgl/webgl_normalmap.html): Loading and drawing a normal map 
-11. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render an OBJ file using ObjModel.js
-12. [Camera](https://www.songho.ca/webgl/webgl_camera.html): Orbital camera interface using pointer events
+11. [Drawing Sprite](https://www.songho.ca/webgl/webgl_sprite.html): Drawing sprites using Sprite class 
+12. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render an OBJ file using ObjModel.js
+13. [Camera](https://www.songho.ca/webgl/webgl_camera.html): Orbital camera interface using pointer events
+14. [Mouse Picking](https://www.songho.ca/webgl/webgl_pick.html): Mouse picking using selection buffer
 
 
 
