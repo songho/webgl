@@ -2,7 +2,7 @@
 <html>
 
 <!-- ==========================================================================
-The first WebGL testing page for VetTech project
+Test Sprite
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2012-03-06
@@ -11,17 +11,14 @@ UPDATED: 2012-12-03
 -->
 
 <head>
-<title>Testing WebGL</title>
+<title>WebGL Sprite</title>
 <meta name="generator" content="editplus" />
 <meta name="author" content="Song Ho Ahn" />
 <meta name="keywords" content="" />
 <meta name="description" content="" />
-
-<!-- CSS -->
-<link type="text/css" rel="stylesheet" href="files/css/vettech.css" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
 <!-- JavaScript -->
-<script type="text/javascript"src="files/js/jquery-1.7.min.js"></script>
 <script type="text/javascript"src="files/js/Logger.js"></script>
 <!-- WebGL libs -->
 <script type="text/javascript" src="files/js/Vectors.js"></script>
@@ -36,63 +33,117 @@ UPDATED: 2012-12-03
 <script type="text/javascript" src="files/js/Sprite.js"></script>
 <script type="text/javascript" src="files/js/webglUtils.js"></script>
 
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    box-sizing:border-box;
+}
+h3 {
+    margin-bottom:5px;
+}
+p {
+    margin:0 0 1em 0;
+}
+.contentblock {
+    display:flex;
+    position:absolute;
+    left:0px;
+    right:0px;
+    top:0px;
+    bottom:0px;
+    padding:10px;
+    line-height:0;
+}
+.mainblock {
+    position:relative;
+    flex:1 1 300px;
+    border:1px solid #ddd;
+}
+.rightblock {
+    flex:0 0 250px;
+    height:100%;
+    overflow:auto;
+    margin-left:10px;
+    line-height:110%;
+}
+#webglView {
+    width:100%;
+    height:100%;
+    touch-action:none; /* prevent browser handle pointer events */
+}
+#info {
+    position:absolute;
+    top:0;
+    right:0;
+    margin-top:5px;
+    margin-right:5px;
+    line-height:110%;
+}
+hr {
+    height:1px;
+    background-color:#aaa;
+    border:none;
+}
+.gridbox {
+    display:grid;
+    grid-template-columns:100px 145px;
+    gap:5px;
+    font-size:0.8em;
+}
+.gridcol1 {
+    text-align:right;
+    font-weight:bold;
+}
+.gridcol2 {
+    word-wrap:break-word;
+}
+</style>
 
 <script type="text/javascript">
-// <![CDATA[
 
-var gl = null;
-var matrixComputed = false;
-var vboVertex;  // vertex attributes
-var vboIndex;   // index attribute
-var CAMERA_Z = 15;
-var SPRITE_COUNT = 10000;
-var spriteCount = SPRITE_COUNT;
+// global vars
+let gl = null;
 
+// constants
+const CAMERA_Z = 15;
+const SPRITE_COUNT = 20000;
 
-window.onload = function(){
-    startWebGL("webglView");
-
-    var radioSL = document.getElementById("radioSL");
-    radioSL.checked = true;
-    radioSL.onclick = function()
-    {
-        matrixComputed = false;
-        gl.uniform1i(gl.program.uniform.matrixComputed, false);
-    };
-    var radioJS = document.getElementById("radioJS");
-    radioJS.onclick = function()
-    {
-        matrixComputed = true;
-        gl.uniform1i(gl.program.uniform.matrixComputed, true);
-    };
-
-    // sprite count
-    var selectSpriteCount = document.getElementById("selectSpriteCount");
-    selectSpriteCount.selectedIndex = 0;
-    spriteCount = parseInt(selectSpriteCount.options[0].text);
-    selectSpriteCount.onchange = function()
-    {
-        spriteCount = parseInt(this.options[this.selectedIndex].text);
-    };
-
-    // framerate
-    gl.fps = new FrameRate("fps");
-};
+let vboVertex;  // vertex attributes
+let vboIndex;   // index attribute
 
 
 
-// WebGL ======================================================================
-function startWebGL(canvasId)
+///////////////////////////////////////////////////////////////////////////////
+// main entry point
+///////////////////////////////////////////////////////////////////////////////
+document.addEventListener("DOMContentLoaded", () =>
+{
+    let success = initWebGL("webglView");
+    if(!success)
+        return;
+
+    initHtml();
+});
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init WebGL
+///////////////////////////////////////////////////////////////////////////////
+function initWebGL(canvasId)
 {
     try{
 
-    var canvas = document.getElementById(canvasId);
+    let canvas = document.getElementById(canvasId);
     if(!isWebGLSupported())
     {
-        var node = canvas.parentNode;
-        var message = "This page requires WebGL enabled browser.<br/>" +
+        let node = canvas.parentNode;
+        let message = "This page requires WebGL enabled browser.<br/>" +
                       "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
-        node.innerHTML = "<div style='width:100%; height:100%; text-align:center; background:#333;'>\n" +
+        node.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
                          message +
                          "</div>\n";
 
@@ -100,106 +151,83 @@ function startWebGL(canvasId)
         return false;
     }
 
-    // resize window to fit to parent
-    canvas.width = canvas.parentNode.offsetWidth - 2; // -border
-    canvas.height = canvas.width * 0.5;
-
-    gl = getContextGL(canvas);
-    if(gl)
+    // get gl context
+    gl = getContextGL(canvas)
+    if(!gl)
     {
-        log("===== WebGL Info =====");
-        log(" Version: " + gl.getParameter(gl.VERSION));
-        log("GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
-        log("  Vendor: " + gl.getParameter(gl.VENDOR));
-        log("Renderer: " + gl.getParameter(gl.RENDERER));
-        log("   Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
-        log("   Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
-        log(" Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
-        log();
+        Logger.show();
+        log("[ERROR] Failed to get WebGL context.");
+        return false;
     }
-    initGL(canvas.width, canvas.height);
-    initGLSL();
+    logWebGL(gl);
+
+    // remember canvas
+    gl.canvas = canvas;
+
+    // init gl and glsl
+    initGL(gl);
+    initGLSL(gl);
     log("WebGL is initialized.");
 
     // init app ===============================================================
-    // create a floor
-    initFloor();
 
-    // texture
-    //gl.tex0 = loadTexture(gl, "files/images/HTML5_Badge_32.png", false);
-    //gl.tex0 = loadTexture(gl, "files/images/tux-g2_128.png", false);
-    gl.tex0 = loadTexture(gl, "files/images/marker_blue.png", false);
+    // load a texture
+    gl.tex0 = loadTexture(gl, "files/images/debugger02.png", false);
+    gl.textureUsed = true;
+    gl.matrixComputed = false;
 
     // create sprites
     gl.sprites = [];
-    for(var i = 0; i < SPRITE_COUNT; ++i)
+    for(let i = 0; i < SPRITE_COUNT; ++i)
     {
-        var sprite = new Sprite(gl);
-        var x = Math.random() * 20 - 10;
-        var y = Math.random() * 20 - 10;
-        var s = Math.random() + 0.5;
+        let sprite = new Sprite(gl);
+        let x = Math.random() * 20 - 10;
+        let y = Math.random() * 20 - 10;
+        let s = Math.random() + 0.5;
         sprite.setPosition(x, y);
         sprite.setSize(s, s);
         sprite.setTexture(gl.tex0);
         gl.sprites.push(sprite);
     }
-    log("Sprite Count: " + gl.sprites.length);
-
-    // init trackball
-    var radius = canvas.height * 0.3;
-    gl.trackball = new Trackball(radius, canvas.width, canvas.height);
-    log(gl.trackball);
-
-    // init camera quaternion
-    gl.cameraZ = CAMERA_Z;
-    gl.cameraQuat = new Quaternion(1, 0, 0, 0);
-
-    // initial view matrix
-    gl.matrixView.identity();
-    gl.matrixView.translate(0, 0, -gl.cameraZ);
+    gl.spriteCount = SPRITE_COUNT;
+    log("Created " + gl.sprites.length + " sprites");
 
     // add mouse state holder
     gl.mouse = new MouseState();
 
+    // add mouse state holder
+    gl.mouse = new MouseState();
+
+    // init touch states
+    gl.touches = [];
+
     // register event handlers
-    canvas.addEventListener("resize", function(){handleResize(canvas.width, canvas.height);}, false);
-    log("Added canvas resize event listener, handleResize().");
-    canvas.addEventListener("mousemove", handleMouseMove, false);
-    log("Added canvas mousemove event listener, handleMouseMove().");
-    canvas.addEventListener("mousedown", handleMouseDown, false);
-    log("Added canvas mousedown event listener, handleMouseDown().");
-    canvas.addEventListener("mouseup", handleMouseUp, false);
-    log("Added canvas mouseup event listener, handleMouseUp().");
-    canvas.addEventListener("click", handleClick, false);
+    window.addEventListener("resize",  handleResize);
+    log("Added window resize envent listener, handleResize().");
+    canvas.addEventListener("click", handleClick);
     log("Added canvas click event listener, handleClick().");
-    canvas.addEventListener("mouseout", handleMouseOut, false);
+    // mouse events
+    canvas.addEventListener("mousemove", handleMouseMove);
+    log("Added canvas mousemove event listener, handleMouseMove().");
+    canvas.addEventListener("mousedown", handleMouseDown);
+    log("Added canvas mousedown event listener, handleMouseDown().");
+    canvas.addEventListener("mouseup", handleMouseUp);
+    log("Added canvas mouseup event listener, handleMouseUp().");
+    canvas.addEventListener("mouseout", handleMouseOut);
     log("Added canvas mouseout event listener, handleMouseOut().");
-    canvas.addEventListener("contextmenu", handleContextMenu, false);
+    canvas.addEventListener("contextmenu", handleContextMenu);
     log("Added canvas contextmenu event listener, handleContextMenu().");
+    canvas.addEventListener("wheel", handleWheel);
+    log("Added canvas wheel event listeners, handleWheel()");
+    // canvas touch events
+    canvas.addEventListener("touchstart", handleTouchStart);
+    canvas.addEventListener("touchmove", handleTouchMove);
+    canvas.addEventListener("touchend", handleTouchEnd);
+    canvas.addEventListener("touchcancel", handleTouchCancel);
+    log("Added canvas touch events.");
 
-    // try to find "requestAnimationFrame" function
-    // if it is not available use setTimeout() instead
-    var requestAnimationFrame = getRequestAnimationFrameFunction(window);
-
-    // prepare rendering loop
-    log("\nStarting rendering loop...\n");
-
-    var timer = new Timer();
-    var fps = new FrameRate("framerate");
-    var frameCallback = function()
-    {
-        fps.tick();
-        gl.frameTime = timer.getFrameTime(); // get elapsed time as ms
-        gl.runTime += gl.frameTime;
-        frame();
-        postFrame();
-        requestAnimationFrame(frameCallback);
-    };
-
-    // start rendering loop
-    timer.start();
-    gl.runTime = 0;
-    requestAnimationFrame(frameCallback);
+    // ready to start rendering loop
+    startRendering(gl);
 
     }catch(e){
         log("[ERROR] " + e.message);
@@ -210,6 +238,55 @@ function startWebGL(canvasId)
 }
 
 
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// start rendering loop
+///////////////////////////////////////////////////////////////////////////////
+function startRendering(gl)
+{
+    log("\nStarting rendering loop...\n");
+
+    // try to find "requestAnimationFrame" function
+    // if it is not available use setTimeout() instead
+    let requestAnimationFrame = getRequestAnimationFrameFunction(window);
+    let timer = new Timer();
+    gl.fps = new FrameRate("fps");
+    let frameCallback = function()
+    {
+        gl.fps.tick();
+        gl.frameTime = timer.getFrameTime();
+        gl.runTime += gl.frameTime;
+        frame();
+        postFrame();
+        requestAnimationFrame(frameCallback);
+    };
+
+    timer.start();
+    gl.runTime = 0;
+    requestAnimationFrame(frameCallback);
+}
+
+
+
 ///////////////////////////////////////////////////////////////////////////////
 // draw a single frame
 ///////////////////////////////////////////////////////////////////////////////
@@ -217,8 +294,14 @@ function frame()
 {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
+    // init view matrices
+    gl.matrixView = new Matrix4();
+    gl.matrixView.rotateY(gl.camera.angle.y);
+    gl.matrixView.rotateX(gl.camera.angle.x);
+    gl.matrixView.translate(0, 0, -gl.camera.distance);
+    gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+
     drawSprites();
-    //drawFloor();
 }
 
 
@@ -228,7 +311,6 @@ function frame()
 ///////////////////////////////////////////////////////////////////////////////
 function postFrame()
 {
-    gl.fps.tick();
 }
 
 
@@ -244,10 +326,6 @@ function drawSprites()
         return;
     gl.useProgram(gl.shaderPrograms["sprite"]);
 
-    // setup attribs
-    gl.enableVertexAttribArray(gl.program.attribute.vertexPosition);
-    gl.enableVertexAttribArray(gl.program.attribute.vertexTexCoord0);
-
     // view transform matrix
     gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
     gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
@@ -259,16 +337,16 @@ function drawSprites()
     gl.enable(gl.BLEND);
     gl.disable(gl.DEPTH_TEST);
 
-    for(var i = 0; i < spriteCount; ++i)
+    for(let i = 0; i < gl.spriteCount; ++i)
     {
-        if(matrixComputed)
+        if(gl.matrixComputed)
         {
-            var matMV = gl.matrixView.clone().multiply(gl.sprites[i].matrix);
+            let matMV = gl.matrixView.clone().multiply(gl.sprites[i].matrix);
             // lock rotations
             matMV.setLeftAxis(1, 0, 0);
             matMV.setUpAxis(0, 1, 0);
             matMV.setForwardAxis(0, 0, 1);
-            var matMVP = gl.matrixProjection.clone().multiply(matMV);
+            let matMVP = gl.matrixProjection.clone().multiply(matMV);
             gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, matMVP.m);
         }
 
@@ -277,142 +355,6 @@ function drawSprites()
 
     gl.disable(gl.BLEND);
     gl.enable(gl.DEPTH_TEST);
-
-    // disable attribs
-    gl.disableVertexAttribArray(gl.program.attribute.vertexPosition);
-    gl.disableVertexAttribArray(gl.program.attribute.vertexTexCoord0);
-}
-
-
-
-///////////////////////////////////////////////////////////////////////////////
-// create a floor
-///////////////////////////////////////////////////////////////////////////////
-function initFloor()
-{
-    var W = 20;
-    var H = 20;
-    var X = 0;
-    var Y = 0;//-523;
-    var Z = 0;//275;
-    var S = 1; // uv scale
-    var T = 1; // uv scale
-
-    var vertices = new Float32Array(4 * 10); // interleave vertex data
-
-    // interleaved triangle strip
-    vertices[0] = X - W*0.5;    vertices[1] = Y;    vertices[2] = Z - H*0.5;
-    vertices[3] = 0;            vertices[4] = 1;    vertices[5] = 0;
-    vertices[6] = 0;            vertices[7] = 0;
-    vertices[8] = 0;            vertices[9] = 0;
-
-    vertices[10] = X - W*0.5;   vertices[11] = Y;   vertices[12] = Z + H*0.5;
-    vertices[13] = 0;           vertices[14] = 1;   vertices[15] = 0;
-    vertices[16] = 0;           vertices[17] = T;
-    vertices[18] = 0;           vertices[19] = 1;
-
-    vertices[20] = X + W*0.5;   vertices[21] = Y;   vertices[22] = Z - H*0.5;
-    vertices[23] = 0;           vertices[24] = 1;   vertices[25] = 0;
-    vertices[26] = S;           vertices[27] = 0;
-    vertices[28] = 1;           vertices[29] = 0;
-
-    vertices[30] = X + W*0.5;   vertices[31] = Y;   vertices[32] = Z + H*0.5;
-    vertices[33] = 0;           vertices[34] = 1;   vertices[35] = 0;
-    vertices[36] = S;           vertices[37] = T;
-    vertices[38] = 1;           vertices[39] = 1;
-
-    // create interleaved vertex buffer
-    gl.floor = {};
-    gl.floor.vboVertex = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.floor.vboVertex);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-
-    gl.floor.matrix = new Matrix4();
-
-    // load texture
-    gl.floor.tex0 = loadTexture(gl, "files/images/floor.png", true);
-    gl.floor.tex1 = loadTexture(gl, "files/images/gradient.png", false);
-}
-
-
-
-///////////////////////////////////////////////////////////////////////////////
-// draw the floor
-///////////////////////////////////////////////////////////////////////////////
-function drawFloor()
-{
-    if(gl.floor == undefined || gl.floor.vboVertex == undefined)
-        return;
-
-    // set active shader program
-    gl.program = gl.shaderPrograms["floor"];
-    if(!gl.program)
-        return;
-    gl.useProgram(gl.shaderPrograms["floor"]);
-
-    // set attribs
-    gl.enableVertexAttribArray(gl.program.attribute.vertexPosition);
-    gl.enableVertexAttribArray(gl.program.attribute.vertexNormal);
-    gl.enableVertexAttribArray(gl.program.attribute.vertexTexCoord0);
-    gl.enableVertexAttribArray(gl.program.attribute.vertexTexCoord1);
-
-    // model matrix
-    gl.matrixModel = gl.floor.matrix.clone();
-
-    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
-    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
-
-    // compute normal transform
-    gl.matrixNormal = gl.matrixModelView.clone().invert().transpose();
-    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
-
-    // compute modelviewprojection transform
-    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
-    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
-
-    gl.matrixProjector= new Matrix4(0.5, 0,   0,   0,
-                                    0,   0.5, 0,   0,
-                                    0,   0,   0.5, 0,
-                                    0.5, 0.5, 0.5, 1);
-    //var projView = gl.matrixView.clone();
-    //projView.translate(0,0,5);
-    var projView = new Matrix4();
-    //projView = Matrix4.lookat(new Vector3(0,0,0), new Vector3(0,1,1), new Vector3(0,1,0));
-    //projView.translate(0,5,0);
-    projView.rotateX(-90/180*Math.PI);
-    //projView = gl.matrixView.clone();
-    var projModel = new Matrix4();
-    projModel.translate(0,10,0);
-    var projProj= Matrix4.makePerspective(45, 1, 1, 100);
-    var matrixProjector = gl.matrixProjector.clone().multiply(projProj.multiply(projView.multiply(projModel)));
-    gl.uniformMatrix4fv(gl.program.uniform.matrixProjector, false, matrixProjector.m);
-    //matrixProjector = gl.matrixProjector.clone().multiply(gl.matrixModelViewProjection);
-    //matrixProjector = matrixProjector.multiply(projView);
-    //gl.uniformMatrix4fv(gl.program.uniform.matrixProjector, false, matrixProjector.m);
-
-
-    // bind texture
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, gl.floor.tex0);
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, gl.floor.tex1);
-    //gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.floor.vboVertex);
-    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 40, 0);
-    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 40, 3*4);
-    gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 40, 6*4);
-    gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord1, 2, gl.FLOAT, false, 40, 8*4);
-
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.disableVertexAttribArray(gl.program.attribute.vertexPosition);
-    gl.disableVertexAttribArray(gl.program.attribute.vertexNormal);
-    gl.disableVertexAttribArray(gl.program.attribute.vertexTexCoord0);
-    gl.disableVertexAttribArray(gl.program.attribute.vertexTexCoord1);
 }
 
 
@@ -422,15 +364,14 @@ function drawFloor()
 ///////////////////////////////////////////////////////////////////////////////
 function handleResize(width, height)
 {
-    gl.screenWidth = width;
-    gl.screenHeight = height;
-    gl.viewport(0, 0, width, height);
-    gl.matrixProjection = Matrix4.makePerspective(45, width/height, 1, 100);
+    // resize window to fit to parent
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
 
-    // reset trackball size
-    gl.trackball(gl.screenHeight * 0.3, gl.screenWidth, gl.screenHeight);
-    log("Window is resized: " + gl.screenWidth + " x " + gl.screenHeight);
-    //alert("width: " + gl.screenWidth + " height: " + gl.screenHeight);
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, gl.nearPlane, gl.farPlane);
+
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
 }
 
 
@@ -440,44 +381,31 @@ function handleResize(width, height)
 ///////////////////////////////////////////////////////////////////////////////
 function handleMouseMove(e)
 {
-    //e = e || window.event; // hack for IE
-    gl.mouse.x = e.clientX - this.offsetLeft;
-    gl.mouse.y = e.clientY - this.offsetTop;
+    const SCALE_ANGLE = 0.01;
+    const DEG2RAD = Math.PI / 180;
+
+    let offset = getElementOffset(this);
+    let mouseX = e.pageX - offset.x;
+    let mouseY = e.pageY - offset.y;
+    let deltaX = mouseX - gl.mouse.x;
+    let deltaY = mouseY - gl.mouse.y;
+    gl.mouse.x = mouseX;    // remember
+    gl.mouse.y = mouseY;
 
     // rotate model
     if(gl.mouse.leftDown)
     {
-        var v1 = gl.trackball.getUnitVector(gl.mouse.downX, gl.mouse.downY);
-        var v2 = gl.trackball.getUnitVector(gl.mouse.x, gl.mouse.y);
-        if(v1.x != v2.x || v1.y != v2.y || v1.z != v2.z)
-        {
-            var q = Quaternion.toQuaternion(v1, v2);    // delta rotation
-            gl.cameraQuat = q.multiply(gl.cameraQuat);
-        }
-
-        // update down position
-        gl.mouse.downX = gl.mouse.x;
-        gl.mouse.downY = gl.mouse.y;
+        let delta = new Vector2();
+        delta.x = (gl.mouse.y - gl.mouse.downY) * SCALE_ANGLE;
+        delta.y = (gl.mouse.x - gl.mouse.downX) * SCALE_ANGLE;
+        gl.camera.angle = gl.camera.downAngle.clone().add(delta);
     }
     if(gl.mouse.rightDown)
     {
-        gl.cameraZ -= (gl.mouse.y - gl.mouse.downY) * 0.05;
-        if(gl.cameraZ < 2)
-            gl.cameraZ = 2;
-        else if(gl.cameraZ > 50)
-            gl.cameraZ = 50;
-
-        gl.mouse.downY = gl.mouse.y; // update
+        let delta = new Vector3(-deltaX * 0.05, deltaY * 0.05, 0);
+        gl.camera.target.add(delta);
     }
     //log(gl.mouse.toString());
-
-    // update view matrix
-    if(gl.mouse.leftDown || gl.mouse.rightDown)
-    {
-        gl.matrixView.identity();
-        gl.matrixView.translate(0, 0, -gl.cameraZ);
-        gl.matrixView.multiply(gl.cameraQuat.toMatrix());
-    }
 }
 
 function handleMouseDown(e)
@@ -485,66 +413,23 @@ function handleMouseDown(e)
     gl.mouse.downX = gl.mouse.x;
     gl.mouse.downY = gl.mouse.y;
 
-    //e = e || window.event; // hack for IE
-    if("which" in e)
-    {
-        switch(e.which)
-        {
-        case 1:
-            gl.mouse.leftDown = true;
-            break;
-        case 2:
-            gl.mouse.middleDown = true;
-            break;
-        case 3:
-            gl.mouse.rightDown = true;
-            break;
-        }
-    }
-    else if("button" in e) // for IE
-    {
-        if(e.button & 1)
-            gl.mouse.leftDown = true;
-        if(e.button & 2)
-            gl.mouse.rightDown = true;
-        if(e.button & 4)
-            gl.mouse.middleDown = true;
-    }
-    //log(gl.mouse);
+    // remember previous angle and quaternion when mouse down
+    gl.camera.downAngle = gl.camera.angle.clone();
+    gl.camera.downQuaternion = gl.camera.quaternion.clone();
+
+    if(e.button == 0) gl.mouse.leftDown = true;    // primary
+    if(e.button == 1) gl.mouse.middleDown = true;  // auxiliary
+    if(e.button == 2) gl.mouse.rightDown = true;   // secondary
+
+    e.preventDefault(); // disable context menu
 }
 
 function handleMouseUp(e)
 {
-    //e = e || window.event; // hack for IE
-    if("which" in e)
-    {
-        switch(e.which)
-        {
-        case 1:
-            gl.mouse.leftDown = false;
-            break;
-        case 2:
-            gl.mouse.middleDown = false;
-            break;
-        case 3:
-            gl.mouse.rightDown = false;
-            break;
-        }
-    }
-    else if("button" in e) // for IE
-    {
-        if(e.button & 1)
-            gl.mouse.leftDown = false;
-        if(e.button & 2)
-            gl.mouse.rightDown = false;
-        if(e.button & 4)
-            gl.mouse.middleDown = false;
-    }
-    //log(gl.mouse);
-}
-
-function handleClick(e)
-{
+    if(e.button == 0) gl.mouse.leftDown = false;
+    if(e.button == 1) gl.mouse.middleDown = false;
+    if(e.button == 2) gl.mouse.rightDown = false;
+    //e.preventDefault(); // disable context menu
 }
 
 function handleMouseOut(e)
@@ -553,35 +438,177 @@ function handleMouseOut(e)
     gl.mouse.rightDown = false;
 }
 
+function handleWheel(e)
+{
+    const ZOOM_SCALE = 0.01;
+
+    // positive deltaY = wheel down
+    // negative deltaY = wheel up
+    if(e.deltaY != 0)
+    {
+        let deltaDistance = -e.deltaY * ZOOM_SCALE;
+        gl.camera.distance += deltaDistance;
+        if(gl.camera.distance < gl.nearPlane)
+            gl.camera.distance = gl.nearPlane;
+        else if(gl.camera.distance > gl.farPlane)
+            gl.camera.distance = gl.farPlane;
+
+        gl.camera.distance += deltaDistance;
+
+    }
+
+    e.preventDefault();
+}
+
+function handleClick(e)
+{
+}
+
 function handleContextMenu(e)
 {
     e.preventDefault(); // disable context menu
 }
 
 
+
 ///////////////////////////////////////////////////////////////////////////////
-// return WebGL rendering context if available
+// handle touch events
 ///////////////////////////////////////////////////////////////////////////////
-function getContextGL(canvas)
+function handleTouchStart(e)
 {
-    var context = null;
-    var names = ["webgl", "experimental-webgl", "moz-webgl", "webkit-3d"];
-    for(i = 0; i < names.length; ++i)
-    {
-        try{
+    e.preventDefault();
 
-        context = canvas.getContext(names[i]);
-        if(context)
-            break;
+    // remember angles when touch started
+    gl.camera.touchAngle = gl.camera.angle.clone();
 
-        }catch(e){}
-    }
-    if(!context)
+    // remember all touch data when touch started
+    let touches = e.changedTouches;
+    for(let i = 0; i < touches.length; ++i)
     {
-        log("[ERROR] Failed to get WebGL rendering context.");
-        alert("[ERROR] Failed to get WebGL context.");
+        gl.touches.push(copyTouch(touches[i]));
+        gl.touches.distance = 0;
     }
-    return context;
+
+    if(gl.touches.length == 1)
+        gl.touches.downTouch = copyTouch(gl.touches[0]);
+}
+
+function handleTouchMove(e)
+{
+    e.preventDefault();
+
+    // get 2 touch objects for camera pannng and zoom effects
+    let touches = e.changedTouches;
+    let touch1, touch2; // current touches
+    for(let i = 0; i < touches.length; ++i)
+    {
+        //log("Touch Moved:" + findTouchIndex(touches[i]));
+        let index = findTouchIndex(touches[i]);
+        if(index == 0)
+            touch1 = touches[i];
+        else if(index == 1)
+            touch2 = touches[i];
+    }
+
+    // if 2 touches, perform pan/zoom
+    if(gl.touches.length == 2)
+    {
+        // delta touch movements
+        let delta1 = new Vector2(touch1.pageX - gl.touches[0].pageX, touch1.pageY - gl.touches[0].pageY);
+        let delta2 = new Vector2(touch2.pageX - gl.touches[1].pageX, touch2.pageY - gl.touches[1].pageY);
+        let deltaAvg = delta1.clone().add(delta2).scale(0.5);
+
+        // shift (pan) camera
+        // use the delta average for shifing
+        const SHIFT_SCALE = 0.003;
+        deltaAvg.scale(SHIFT_SCALE);
+        gl.camera.target += deltaAvg;
+
+        // zoom camera
+        const ZOOM_SCALE = 0.003;
+        // difference between 2 touches
+        let diff = new Vector2(touch2.pageX - touch1.pageX, touch2.pageY - touch1.pageY);
+        let distance = diff.length();
+        let deltaDistance = 0;
+        if(gl.touches.distance > 0)
+            deltaDistance = distance - gl.touches.distance;
+
+        deltaDistance *= ZOOM_SCALE;
+        gl.camera.distance += deltaDistance;
+        if(gl.camera.distance < gl.nearPlane)
+            gl.camera.distance = gl.nearPlane;
+        else if(gl.camera.distance > gl.farPlane)
+            gl.camera.distance = gl.farPlane;
+
+        // update touch positions
+        gl.touches[0].pageX = touch1.pageX;
+        gl.touches[0].pageY = touch1.pageY;
+        gl.touches[1].pageX = touch2.pageX;
+        gl.touches[1].pageY = touch2.pageY;
+        // update distance
+        gl.touches.distance = distance;
+    }
+    // if 1 touch, perform rotate
+    else if(gl.touches.length == 1)
+    {
+        const ROTATE_SCALE = 0.2;
+        let angle = new Vector3();
+        angle.x = gl.camera.touchAngle.x + (touch1.pageY - gl.touches.downTouch.pageY) * ROTATE_SCALE;
+        angle.y = gl.camera.touchAngle.y - (touch1.pageX - gl.touches.downTouch.pageX) * ROTATE_SCALE;
+        gl.camera.angle = angle;
+
+        // update touch position
+        gl.touches[0].pageX = touch1.pageX;
+        gl.touches[0].pageY = touch1.pageY;
+    }
+}
+
+function handleTouchEnd(e)
+{
+    e.preventDefault();
+
+    // remove ended touch object from array
+    let touches = e.changedTouches;
+    for(let i = 0; i < touches.length; ++i)
+    {
+        let index = findTouchIndex(touches[i]);
+        if(index >= 0) // found
+        {
+            gl.touches.splice(index, 1);    // remove
+        }
+    }
+
+    // if there is still touch object, update the first touch object for rotation
+    if(gl.touches.length > 0)
+        gl.touches.downTouch = copyTouch(gl.touches[0]);
+}
+
+function handleTouchCancel(e)
+{
+    gl.touches.length = 0;
+   //log("Touch canceled.");
+}
+
+function handleTouchLeave(e)
+{
+    gl.touches.length = 0;
+    //log("Touch left.");
+}
+
+function copyTouch(touch)
+{
+    return {identifier:touch.identifier, pageX:touch.pageX, pageY:touch.pageY};
+}
+
+function findTouchIndex(touch)
+{
+    // find touch object with same id
+    for(let i = 0; i < gl.touches.length; ++i)
+    {
+        if(touch.identifier == gl.touches[i].identifier)
+            return i;
+    }
+    return -1;
 }
 
 
@@ -599,11 +626,8 @@ function initGL(width, height)
     gl.cullFace(gl.BACK);
     gl.enable(gl.BLEND);        // enable blend
 
-    initVBOs();
-
     // default light
-    gl.light = new Light(0, 0, 4, 1);
-    //gl.light.position.normalize(); //@@ fix normalize()
+    gl.light = new Light(0, 0, 1, 0);
     gl.light.color.set(1.0, 1.0, 1.0, 1.0);        // light color
     gl.light.attenuations.set(1, 0.0, 0); // attenuations (constant, linear, quad)
     log("    Light Position: " + gl.light.position);
@@ -613,7 +637,7 @@ function initGL(width, height)
 
     // default material
     gl.material = new Material(0.7, 0.7, 0.7, 1.0);    // with default diffuse
-    gl.material.ambient.set(0.0, 0.0, 0.0, 1);
+    gl.material.ambient.set(0.3, 0.3, 0.3, 1);
     gl.material.specular.set(1, 1, 1, 1);
     gl.material.shininess = 128;
     log("  Material Ambient: " + gl.material.ambient);
@@ -622,92 +646,22 @@ function initGL(width, height)
     log("Material Shininess: " + gl.material.shininess);
     log();
 
-    gl.screenWidth = width;
-    gl.screenHeight = height;
-    gl.viewport(0, 0, width, height);
-    log("Screen Dimension: " + width + " x " + height);
+    gl.nearPlane = 1;
+    gl.farPlane = 1000;
+
+    // init camera
+    gl.camera = {};
+    gl.camera.target = new Vector3(0, 0, 0);
+    gl.camera.angle = new Vector2(0, 0);
+    gl.camera.quaternion = new Quaternion();
+    gl.camera.distance = CAMERA_Z;
 
     // init matrices
-    gl.matrixProjection = Matrix4.makePerspective(45, width/height, 1, 100);
+    handleResize();
     gl.matrixModel = new Matrix4();
     gl.matrixView = new Matrix4();
     gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
     gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
-
-    gl.matrixProjector= new Matrix4(0.5, 0,   0,   0,
-                                    0,   0.5, 0,   0,
-                                    0,   0,   0.5, 0,
-                                    0.5, 0.5, 0.5, 1);
-}
-
-
-
-///////////////////////////////////////////////////////////////////////////////
-// create vbo for a cube
-///////////////////////////////////////////////////////////////////////////////
-function initVBOs()
-{
-    // cube ///////////////////////////////////////////////////////////////////
-    //    v5------v4  Using GL_TRIANGLES per side
-    //   /|      /|
-    //  v1------v0|
-    //  | |     | |
-    //  | |v6---|-|v7
-    //  |/      |/
-    //  v2------v3
-
-    // vertex coords array
-    var vertices = new Float32Array([ 1, 1, 1, -1, 1, 1, -1,-1, 1,  1,-1, 1,    // v0-v1-v2-v3
-                                      1, 1, 1,  1,-1, 1,  1,-1,-1,  1, 1,-1,    // v0-v3-v7-v4
-                                      1, 1, 1,  1, 1,-1, -1, 1,-1, -1, 1, 1,    // v0-v4-v5-v1
-                                     -1, 1, 1, -1, 1,-1, -1,-1,-1, -1,-1, 1,    // v1-v5-v6-v2
-                                     -1,-1,-1,  1,-1,-1,  1,-1, 1, -1,-1, 1,    // v6-v7-v3-v2
-                                     -1, 1,-1,  1, 1,-1,  1,-1,-1, -1,-1,-1]);  // v5-v4-v7-v6
-    // normal array
-    var normals = new Float32Array([ 0, 0, 1,  0, 0, 1,  0, 0, 1,  0, 0, 1,     // v0-v1-v2-v3
-                                     1, 0, 0,  1, 0, 0,  1, 0, 0,  1, 0, 0,     // v0-v3-v7-v4
-                                     0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,     // v0-v4-v5-v1
-                                    -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0,     // v1-v5-v6-v2
-                                     0,-1, 0,  0,-1, 0,  0,-1, 0,  0,-1, 0,     // v6-v7-v3-v2
-                                     0, 0,-1,  0, 0,-1,  0, 0,-1,  0, 0,-1]);   // v5-v4-v7-v6
-    /*
-    // color array (r,g,b,a)
-    var colors = new Float32Array([1,1,1,1,  1,1,0,1,  1,0,0,1,  1,0,1,1,       // v0-v1-v2-v3
-                                   1,1,1,1,  1,0,1,1,  0,0,1,1,  0,1,1,1,       // v0-v3-v7-v4
-                                   1,1,1,1,  0,1,1,1,  0,1,0,1,  1,1,0,1,       // v0-v4-v5-v1
-                                   1,1,0,1,  0,1,0,1,  0,0,0,1,  1,0,0,1,       // v1-v5-v6-v2
-                                   0,0,0,1,  0,0,1,1,  1,0,1,1,  1,0,0,1,       // v6-v7-v3-v2
-                                   0,1,0,1,  0,1,1,1,  0,0,1,1,  0,0,0,1]);     // v5-v4-v7-v6
-    */
-    // st(uv) array (s,t)
-    var uvs = new Float32Array([1,0,  0,0,  0,1,  1,1,                          // v0-v1-v2-v3
-                                0,0,  0,1,  1,1,  1,0,                          // v0-v3-v7-v4
-                                1,1,  1,0,  0,0,  0,1,                          // v0-v4-v5-v1
-                                1,0,  0,0,  0,1,  1,1,                          // v1-v5-v6-v2
-                                0,1,  1,1,  1,0,  0,0,                          // v6-v7-v3-v2
-                                1,0,  0,0,  0,1,  1,1]);                        // v5-v4-v7-v6
-    // index array (2 triangles per side)
-    var indices = new Uint8Array([ 0,  1,  2,    2,  3,  0,                     // v0-v1-v2, v2-v3-v0
-                                   4,  5,  6,    6,  7,  4,                     // v0-v3-v7, v7-v4-v0
-                                   8,  9, 10,   10, 11,  8,                     // v0-v4-v5, v5-v1-v0
-                                  12, 13, 14,   14, 15, 12,                     // v1-v5-v6, v6-v2-v1
-                                  16, 17, 18,   18, 19, 16,                     // v6-v7-v3, v3-v2-v6
-                                  20, 21, 22,   22, 23, 20]);                   // v5-v4-v7, v7-v6-v5
-
-    // create interleaved vertex buffer
-    vboVertex = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vboVertex);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices.byteLength + normals.byteLength + uvs.byteLength, gl.STATIC_DRAW);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
-    gl.bufferSubData(gl.ARRAY_BUFFER, vertices.byteLength, normals);
-    gl.bufferSubData(gl.ARRAY_BUFFER, vertices.byteLength + normals.byteLength, uvs);
-    vboVertex.normalOffset = vertices.byteLength;
-    vboVertex.uvOffset = vertices.byteLength + normals.byteLength;
-
-    vboIndex = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vboIndex);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
-    vboIndex.indexCount = indices.length;
 }
 
 
@@ -715,40 +669,22 @@ function initVBOs()
 ///////////////////////////////////////////////////////////////////////////////
 // init GLSL (shaders and programs)
 ///////////////////////////////////////////////////////////////////////////////
-function initGLSL()
+function initGLSL(gl)
 {
+    initVertexAttribArrays(gl); // enable all attribs
+
     // load shaders
-    gl.shaderPrograms = []; // associative array
-
-    // load floor shader
-    createShaderProgram(gl, "files/glsl/webgl_floor.vert", "files/glsl/webgl_floor.frag").then(program =>
-    {
-        gl.useProgram(program);
-
-        // setup uniforms
-        gl.uniform1i(program.uniform.lightEnabled, 1);    // toggle on/off lighting
-        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
-        gl.uniform4fv(program.uniform.lightColor, gl.light.getColor());
-        gl.uniform3fv(program.uniform.lightAttenuations, gl.light.getAttenuations());
-        gl.uniform4fv(program.uniform.materialAmbient, gl.material.getAmbient());
-        gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
-        gl.uniform4fv(program.uniform.materialSpecular, gl.material.getSpecular());
-        gl.uniform1f(program.uniform.materialShininess, gl.material.shininess);
-        gl.uniform1i(program.uniform.map0, 0);
-        gl.uniform1i(program.uniform.map1, 1);
-
-        gl.shaderPrograms["floor"] = program;
-    });
+    gl.shaderPrograms = {}; // associative array
 
     // load sprite shader
-    createShaderProgram(gl, "files/glsl/webgl_sprite.vert", "files/glsl/webgl_sprite.frag").then(program =>
+    createShaderProgram(gl, "files/glsl/gles_sprite.vert", "files/glsl/gles_sprite.frag").then(program =>
     {
         gl.useProgram(program);
 
         // setup uniforms
         gl.uniform4fv(program.uniform.materialDiffuse, new Float32Array([1,1,1,1]));
         gl.uniform1i(program.uniform.map0, 0);
-        gl.uniform1i(program.uniform.matrixComputed, false);
+        gl.uniform1i(program.uniform.matrixComputed, gl.matrixComputed);
 
         gl.shaderPrograms["sprite"] = program;
     });
@@ -756,56 +692,39 @@ function initGLSL()
 
 
 
-function compatibilityCode()
+function initHtml()
 {
-    // Firefox compatibility code
-    // The WebGL*Array where named Canvas*Array in the past.
-    // However, this will only affect old nightly builds. The current nightly does already
-    // support the new names. (13 Dec 2009).
-    try{
-        WebGLFloatArray;
-    }catch(e){
-        try{
-            WebGLArrayBuffer = CanvasArrayBuffer;
-            WebGLByteArray = CanvasByteArray;
-            WebGLUnsignedByteArray = CanvasUnsignedByteArray;
-            WebGLShortArray = CanvasShortArray;
-            WebGLUnsignedShortArray = CanvasUnsignedShortArray;
-            WebGLIntArray = CanvasIntArray;
-            WebGLUnsignedIntArray = CanvasUnsignedIntArray;
-            WebGLFloatArray = CanvasFloatArray;
-        }catch(e){
-            alert("Could not find Canvas array types for WebGL.");
-        }
-    }
+    // sprite count
+    let selectSprites = document.form1.selectSprites;
+    selectSprites.selectedIndex = 0;
+    gl.spriteCount = parseInt(selectSprites.value);
+    selectSprites.addEventListener("change", () =>
+    {
+        gl.spriteCount = parseInt(selectSprites.value);
+    });
 
-    // Google Chrome compatibility code
-    // Since a JavaScript function may have multiple return types, functions
-    // 'getProgrami' and 'getShaderi' where renamed. However, Chrome does still
-    // use the old names.  (30 Nov 2009)
-    if(!gl.getProgramParameter)
+    let radioCompute = document.form1.radioCompute;
+    radioCompute.value = "glsl";
+    radioCompute.forEach(radio =>
     {
-        gl.getProgramParameter = gl.getProgrami;
-    }
-    if(!gl.getShaderParameter)
+        radio.onclick = () =>
+        {
+            if(radio.value == "glsl")
+                gl.matrixComputed = false;
+            else
+                gl.matrixComputed = true;
+            console.log(gl.matrixComputed);
+        };
+    });
+
+    // display frame time
+    let frameTime = document.getElementById("frameTime");
+    setInterval(function()
     {
-        gl.getShaderParameter = gl.getShaderi;
-    }
+        frameTime.innerText = gl.frameTime;
+    }, 100);
 }
 
-
-function resetCamera()
-{
-    gl.cameraZ = CAMERA_Z;
-    gl.matrixView.identity();
-    gl.matrixView.translate(0, 0, -gl.cameraZ);
-    gl.cameraQuat.set(1,0,0,0);
-}
-
-
-
-
-// ]]>
 </script>
 
 </head>
@@ -814,49 +733,48 @@ function resetCamera()
 
 <div class="contentblock">
 
-<div style="width:100%; line-height:0; border:1px solid #aaa;">
-<canvas id="webglView">
-<p style="background:#fff;">
-Your browser does not support canvas element!
-</p>
+<div class="mainblock">
+<canvas id="webglView" width="512" height="512">
 </canvas>
+<pre id="info">
+<div id="fps">0 FPS</div>
+</pre>
 </div>
+<!-- end of mainblock -->
 
-<h4 style="margin:0; padding:0">
-Sprite Test
-</h4>
 
-<div style="float:left; margin-right:30px;">
-<div style="float:left;margin-right:5px;">
-Sprite Count:
-</div>
+<div class="rightblock">
+<h3>
+WebGL Drawing Sprites
+</h3>
 
-<select id="selectSpriteCount">
-    <option>1000</option>
-    <option>2500</option>
-    <option>5000</option>
-    <option>7500</option>
-    <option>10000</option>
+<form name="form1">
+<label for="selectSprites">Sprite Count: </label>
+<select id="selectSprites">
+<option>1000</option>
+<option>5000</option>
+<option>10000</option>
+<option>20000</option>
 </select>
+<br>
+Frame Time: <span id="frameTime">0</span> ms
+<br>
+&nbsp;
+<br>
 
-<div id="fps">
-FPS: 0
+<div style="font-size:12px">
+<input type="radio" name="radioCompute" id="radioGlsl" value="glsl">
+<label for="radioGlsl">Compute Transform Matrix in GLSL</label>
+<br>
+<input type="radio" name="radioCompute" id="radioJs" value="js">
+<label for="radioJs">Compute Transform Matrix in JS</label>
 </div>
-</div>
-
-<div>
-<form action="none">
-<input type="radio" name="group1" id="radioSL" />
-<label for="computeInSL">Compute Transform Matrix in GLSL</label>
-<br />
-<input type="radio" name="group1" id="radioJS" />
-<label for="computeInJS">Compute Transform Matrix in Javascript</label>
 </form>
-</div>
 
+</div>
+<!-- end of rightblock -->
 
 </div> <!-- end of contentblock -->
-
 
 </body>
 </html>
