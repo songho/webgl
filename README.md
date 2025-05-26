@@ -15,6 +15,7 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 12. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render an OBJ file using ObjModel.js
 13. [Camera](https://www.songho.ca/webgl/webgl_camera.html): Orbital camera interface using pointer events
 14. [Mouse Picking](https://www.songho.ca/webgl/webgl_pick.html): Mouse picking using selection buffer
+15. [Drawing Edges](https://www.songho.ca/webgl/webgl_edge.html): Find and generate edge lines from a 3D geometry
 
 
 
