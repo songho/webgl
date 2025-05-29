@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- ==========================================================================
+testing draw image
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2017-08-02
+UPDATED: 2025-05-28
+===============================================================================
+-->
+
+<head>
+<title>WebGL 2D Image</title>
+<meta name="generator" content="editplus">
+<meta name="author" content="Song Ho Ahn">
+<meta name="keywords" content="">
+<meta name="description" content="">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    box-sizing:border-box;
+}
+h3 {
+    margin-bottom:5px;
+}
+p {
+    margin:0 0 1em 0;
+}
+.contentblock {
+    display:flex;
+    position:absolute;
+    left:0px;
+    right:0px;
+    top:0px;
+    bottom:0px;
+    padding:10px;
+    line-height:0;
+}
+.mainblock {
+    position:relative;
+    flex:1 1 300px;
+    border:1px solid #ddd;
+}
+.rightblock {
+    flex:0 0 300px;
+    height:100%;
+    overflow:auto;
+    margin-left:10px;
+    line-height:110%;
+}
+#webglView {
+    width:100%;
+    height:100%;
+    touch-action:none; /* prevent browser handle pointer events */
+}
+</style>
+
+
+
+<!-- JavaScript -->
+<script type="text/javascript" src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script type="text/javascript" src="files/js/Quad.js"></script>
+<script type="text/javascript" src="files/js/webglUtils.js"></script>
+
+<script type="text/javascript">
+
+// global vars ================================================================
+let gl = null;
+
+// constants
+const CAMERA_Z = 10;
+
+
+///////////////////////////////////////////////////////////////////////////////
+// main entry point
+///////////////////////////////////////////////////////////////////////////////
+document.addEventListener("DOMContentLoaded", () =>
+{
+    let success = initWebGL("webglView");
+    if(!success)
+        return;
+});
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init WebGL
+///////////////////////////////////////////////////////////////////////////////
+function initWebGL(canvasId)
+{
+    try{
+
+    let canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        let node = canvas.parentNode;
+        let message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        node.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                         message +
+                         "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // get gl context
+    gl = getContextGL(canvas)
+    if(!gl)
+    {
+        Logger.show();
+        log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // remember canvas
+    gl.canvas = canvas;
+
+    // init gl and glsl
+    initGL(gl);
+    initGLSL(gl);
+    log("WebGL is initialized.");
+
+    // init app ===============================================================
+
+    // load texture
+    gl.tex0 = loadTexture(gl, "files/images/lena_color_512.jpg", false, tex =>
+    {
+        gl.tex0.width = 512;
+        gl.tex0.height = 512;
+        resizeQuad();
+    });
+
+    // register event handlers
+    window.addEventListener("resize",  handleResize);
+    log("Added window resize envent listener, handleResize().");
+
+    // ready to start rendering loop
+    startRendering(gl);
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+    }
+
+    return true;
+}
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// start rendering loop
+///////////////////////////////////////////////////////////////////////////////
+function startRendering(gl)
+{
+    log("\nStarting rendering loop...\n");
+
+    // try to find "requestAnimationFrame" function
+    // if it is not available use setTimeout() instead
+    let requestAnimationFrame = getRequestAnimationFrameFunction(window);
+    let frameCallback = function()
+    {
+        frame();
+        postFrame();
+        requestAnimationFrame(frameCallback);
+    };
+
+    requestAnimationFrame(frameCallback);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // draw right half
+    gl.program = gl.shaderPrograms["postDefault"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    // draw a quad to full screen
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
+    gl.uniform2f(gl.program.uniform.screenDimension, gl.canvas.width, gl.canvas.height);
+    gl.quad.draw();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// after drawing
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// event handlers
+///////////////////////////////////////////////////////////////////////////////
+function handleResize(e)
+{
+    // resize window to fit to parent
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+    // resize quad
+    resizeQuad();
+
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL states
+///////////////////////////////////////////////////////////////////////////////
+function initGL(gl)
+{
+    gl.clearColor(1.0, 1.0, 1.0, 0.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);   // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+    gl.cullFace(gl.BACK);
+
+    // create fullscreen quad
+    gl.quad = new Quad(gl, 0, gl.canvas.width, 0, gl.canvas.height); // l,r,b,t
+    //gl.quad.reverseTextureOrientation();
+
+    // init matrices
+    handleResize();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL(gl)
+{
+    initVertexAttribArrays(gl);
+
+    // load shaders
+    gl.shaderPrograms = {}; // associative array
+
+    // load phong shader with 1 texture
+    createShaderProgram(gl, "files/glsl/gles_postDefault.vert", "files/glsl/gles_postDefault.frag").then(program =>
+    {
+        gl.useProgram(program);
+        gl.uniform1i(program.uniform.map0, 0);
+        gl.uniform2f(program.uniform.screenDimension, gl.canvas.width, gl.canvas.height);
+        gl.shaderPrograms["postDefault"] = program;
+    });
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// resize quad to fit the screen by keeping aspect ratio
+///////////////////////////////////////////////////////////////////////////////
+function resizeQuad()
+{
+    if(!gl.tex0 || !gl.canvas)
+        return;
+
+    let ca = gl.canvas.width / gl.canvas.height;
+    let ta = gl.tex0.width / gl.tex0.height;
+
+    let s = 1;
+    if(ta > ca) // image is wider than canvas
+        s = gl.canvas.width / gl.tex0.width;
+    else // image is narrow than canvas
+        s = gl.canvas.height / gl.tex0.height;
+
+    let w = s * gl.tex0.width;
+    let h = s * gl.tex0.height;
+    let dw = (gl.canvas.width - w) / 2;
+    let dh = (gl.canvas.height - h) / 2;
+    gl.quad.set(dw, w+dw, dh, h+dh);
+    //console.log(gl.quad);
+}
+
+</script>
+
+</head>
+
+<body>
+<div class="contentblock">
+
+<div class="mainblock">
+<canvas id="webglView" width="300" height="300">
+</canvas>
+</div>
+
+</div> <!-- end of contentblock -->
+
+</body>
+</html>
