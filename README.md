@@ -12,7 +12,7 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 9. [Loading Texture](https://www.songho.ca/webgl/webgl_texture.html): Loading a diffuse texture
 10. [Loading Normal Map](https://www.songho.ca/webgl/webgl_normalmap.html): Loading and drawing a normal map 
 11. [Drawing Sprite](https://www.songho.ca/webgl/webgl_sprite.html): Drawing sprites using Sprite class 
-12. [Drawing Image](https://www.songho.ca/webgl/webgl_image.html): Drawing 2D image using Quad class 
+12. [Drawing 2D Image](https://www.songho.ca/webgl/webgl_image.html): Drawing 2D image using Quad class 
 13. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render an OBJ file using ObjModel.js
 14. [Camera](https://www.songho.ca/webgl/webgl_camera.html): Orbital camera interface using pointer events
 15. [Mouse Picking](https://www.songho.ca/webgl/webgl_pick.html): Mouse picking using selection buffer
