@@ -5,7 +5,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2012-01-11
-// UPDATED: 2014-09-02
+// UPDATED: 2025-05-31
 ///////////////////////////////////////////////////////////////////////////////
 
 // constants
@@ -19,7 +19,6 @@ attribute vec2 vertexTexCoord0;
 
 // uniforms
 uniform mat4 matrixNormal;
-uniform mat4 matrixView;
 uniform mat4 matrixModelView;
 uniform mat4 matrixModelViewProjection;
 uniform vec4 lightPosition;             // should be in the eye space
@@ -63,7 +62,4 @@ void main(void)
         lightDistance = length(lightVec);
         lightVec = normalize(lightVec);
     }
-
-
-
 }
