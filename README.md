@@ -14,10 +14,10 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 11. [Drawing Sprite](https://www.songho.ca/webgl/webgl_sprite.html): Drawing sprites using Sprite class 
 12. [Drawing 2D Image](https://www.songho.ca/webgl/webgl_image.html): Drawing 2D image using Quad class 
 13. [Render To Texture](https://www.songho.ca/webgl/webgl_rtt.html): Render to Texture using FrameBuffer class 
-14. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render an OBJ file using ObjModel.js
+14. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render an OBJ file using ObjModel class
 15. [Camera](https://www.songho.ca/webgl/webgl_camera.html): Orbital camera interface using pointer events
 16. [Mouse Picking](https://www.songho.ca/webgl/webgl_pick.html): Mouse picking using selection buffer
-17. [Drawing Edges](https://www.songho.ca/webgl/webgl_edge.html): Find and generate edge lines from a 3D geometry
+17. [Drawing Edges](https://www.songho.ca/webgl/webgl_edge.html): Find and generate edge lines from a 3D geometry using Edge class
 
 
 
