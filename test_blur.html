@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- ==========================================================================
+testing blur with Gaussian kernel
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2017-08-02
+UPDATED: 2025-06-03
+===============================================================================
+-->
+
+<head>
+<title>WebGL Blur</title>
+<meta name="generator" content="editplus" />
+<meta name="author" content="Song Ho Ahn" />
+<meta name="keywords" content="" />
+<meta name="description" content="" />
+<meta charset="utf-8" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    box-sizing:border-box;
+}
+h3 {
+    margin-bottom:5px;
+}
+p {
+    margin:0 0 1em 0;
+}
+.contentblock {
+    display:flex;
+    position:absolute;
+    left:0px;
+    right:0px;
+    top:0px;
+    bottom:0px;
+    padding:10px;
+    line-height:0;
+}
+.mainblock {
+    position:relative;
+    flex:1 1 300px;
+    border:1px solid #ddd;
+}
+.rightblock {
+    flex:0 0 300px;
+    height:100%;
+    overflow:auto;
+    margin-left:10px;
+    line-height:110%;
+}
+#webglView {
+    width:100%;
+    height:100%;
+    touch-action:none; /* prevent browser handle pointer events */
+}
+/* GUI */
+.gridbox {
+    display:grid;
+    grid-template-columns:110px 185px;
+    gap:5px;
+    font-size:0.8em;
+}
+.gridcol1 {
+    text-align:right;
+    font-weight:bold;
+}
+.gridcol2 {
+    word-wrap:break-word;
+}
+.flexbox {
+    display:flex;
+}
+.flexcol1 {
+    flex:1 1 auto;
+}
+.flexcol2 {
+    flex:0 0 20px;
+}
+.kernelinfo {
+    font-size:0.8em;
+}
+#kernelvalue {
+    font-family:"courier new", monospace;
+    border:1px solid #ddd;
+    height:150px;
+    overflow:auto;
+}
+</style>
+
+
+
+<!-- JavaScript -->
+<script src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script src="files/js/Vectors.js"></script>
+<script src="files/js/Matrices.js"></script>
+<script src="files/js/Quaternion.js"></script>
+<script src="files/js/Light.js"></script>
+<script src="files/js/Material.js"></script>
+<script src="files/js/Timer.js"></script>
+<script src="files/js/FrameRate.js"></script>
+<script src="files/js/FrameBuffer.js"></script>
+<script src="files/js/Quad.js"></script>
+<script src="files/js/webglUtils.js"></script>
+<script src="files/js/gaussianKernel.js"></script>
+
+
+<script>
+
+// global vars
+let gl = null;
+
+// constants
+const CAMERA_Z = 10;
+// max half # of kernel elements that gaussian shader supports
+// full kernel size would be (H * 2 - 1)
+const MAX_HALF_KERNEL = 21; // including the center
+const SIGMA = 5.0;          // default sigma value
+
+
+///////////////////////////////////////////////////////////////////////////////
+document.addEventListener("DOMContentLoaded", function(e)
+{
+    // setup WebGL
+    initWebGL("webglView");
+    if(!gl)
+        return;
+
+    initHtml();
+});
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// start WebGL
+///////////////////////////////////////////////////////////////////////////////
+function initWebGL(canvasId)
+{
+    try{
+
+    let canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        let parentNode = canvas.parentNode;
+        let message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        parentNode.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                               message +
+                               "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // resize canvas window to fit in the parent
+    canvas.width = canvas.parentNode.clientWidth;
+    canvas.height = canvas.width / 2;
+
+    gl = getContextGL(canvas);
+    if(!gl)
+    {
+        log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // remember the canvas
+    gl.canvas = canvas;
+
+    // init GL and GLSL
+    initGL(gl);
+    initGLSL(gl);
+
+    // init app ===============================================================
+
+    // create fbo for image processing
+    gl.fbo1 = new FrameBuffer(gl);
+    gl.fbo2 = new FrameBuffer(gl);
+
+    // load texture
+    gl.tex0 = loadTexture(gl, "files/images/lena_color_512.jpg", false, tex =>
+    {
+        gl.tex0.width = 512;
+        gl.tex0.height = 512;
+        resizeQuad();
+
+        // resize fbos
+        gl.fbo1.init(gl.tex0.width, gl.tex0.height);
+        gl.fbo2.init(gl.tex0.width, gl.tex0.height);
+        gl.texQuad.set(0, gl.tex0.width, 0, gl.tex0.height);
+    });
+
+    // create rectangle
+    let halfWidth = Math.floor(gl.canvas.width / 2);
+    gl.quad = new Quad(gl, 0, halfWidth, 0, gl.canvas.height); // l,r,b,t
+    gl.texQuad = new Quad(gl, 0, 512, 0, 512); // l,r,b,t
+    gl.texQuad.reverseTextureOrientation();
+
+    // estimate kernel size
+    let kernelSize = computeGaussianKernelSize(SIGMA);
+    gl.halfKernelSize = Math.floor(kernelSize / 2) + 1;
+    if(gl.halfKernelSize > MAX_HALF_KERNEL)
+        gl.halfKernelSize = MAX_HALF_KERNEL;
+
+    // build half of gaussian kernel starting from center
+    gl.convolveMode = 0;    // convolve both direction
+    gl.kernel = generateHalfGaussianKernel(SIGMA, gl.halfKernelSize);
+    gl.kernel = resizeHalfKernel(gl.kernel, MAX_HALF_KERNEL); // pad 0s
+    log("===== Gaussian Kernel =====");
+    log("Sigma: " + SIGMA);
+    log("Full Kernel Size: " + kernelSize);
+    log("Half Kernel Size: " + gl.halfKernelSize);
+    log("Half Kernel Array Length: " + gl.kernel.length);
+    log("kernel: " + gl.kernel);
+    log();
+    //DEBUG: kernel sum should be 1
+    /*
+    log("Kernel Sum: " + computeHalfKernelSum(gl.kernel));
+    // full kernel
+    gl.kernel = generateGaussianKernel(SIGMA, kernelSize);
+    gl.kernel = resizeKernel(gl.kernel, MAX_HALF_KERNEL * 2 + 1);
+    let sum = 0;
+    for(let i = 0; i < gl.kernel.length; ++i)
+    {
+        sum += gl.kernel[i];
+    }
+    log("Kernel Sum: " + sum);
+    */
+    // init array of pointer objects
+    gl.pointers = [];
+
+    // register event handlers
+    window.addEventListener("resize",  handleResize);
+    log("Added window resize envent listener, handleResize().");
+    canvas.addEventListener("click", handleClick);
+    log("Added canvas click event listener, handleClick().");
+    canvas.addEventListener("contextmenu", handleContextMenu);
+    log("Added canvas contextmenu event listener, handleContextMenu().");
+    canvas.addEventListener("wheel", handleWheel);
+    log("Added canvas wheel event listeners, handleWheel()");
+    // canvas pointer events
+    canvas.addEventListener("pointerdown", handlePointerDown, false);
+    log("Added canvas pointerdown event listeners, handlePointerDown()");
+    canvas.addEventListener("pointerup", handlePointerUp, false);
+    log("Added canvas pointerup event listeners, handlePointerUp()");
+    canvas.addEventListener("pointermove", handlePointerMove, false);
+    log("Added canvas pointermove event listeners, handlePointerMove()");
+    canvas.addEventListener("pointercancel", handlePointerCancel, false);
+    log("Added canvas pointercancel event listeners, handlePointerCancel()");
+    canvas.addEventListener("pointerleave", handlePointerLeave, false);
+    log("Added canvas pointerleave event listeners, handlePointerLeave()");
+
+    // ready to start rendering loop
+    handleResize();
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+    }
+    return true;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // blur image
+    if(gl.convolveMode == 1) // horizontal
+    {
+        blurImage(gl.tex0, gl.fbo2, new Vector2(1,0));      // horizontal
+    }
+    else if(gl.convolveMode == 2)
+    {
+        blurImage(gl.tex0, gl.fbo2, new Vector2(0,1));      // vertical
+    }
+    else
+    {
+        // blur both direction
+        blurImage(gl.tex0, gl.fbo1, new Vector2(1,0));      // horizontal
+        blurImage(gl.fbo1.tex, gl.fbo2, new Vector2(0,1));  // vertical
+    }
+
+    gl.program = gl.shaderPrograms["postDefault"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+    gl.activeTexture(gl.TEXTURE0);
+
+    // draw left half
+    let halfWidth = Math.floor(gl.canvas.width * 0.5); // half
+    gl.viewport(0, 0, halfWidth, gl.canvas.height);
+    gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
+    gl.uniform2f(gl.program.uniform.screenDimension, halfWidth, gl.canvas.height);
+    gl.quad.draw();
+
+    // draw right half
+    gl.viewport(halfWidth, 0, halfWidth, gl.canvas.height);
+    gl.bindTexture(gl.TEXTURE_2D, gl.fbo2.tex);
+    gl.uniform2f(gl.program.uniform.screenDimension, halfWidth, gl.canvas.height);
+    gl.quad.draw();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// after drawing
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// blur image
+///////////////////////////////////////////////////////////////////////////////
+function blurImage(texId, fbo, direction)
+{
+    gl.program = gl.shaderPrograms["gaussian"];
+    if(!gl.program) return;
+    gl.useProgram(gl.program);
+
+    fbo.bind();
+
+    gl.viewport(0, 0, fbo.width, fbo.height);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    gl.uniform1fv(gl.program.uniform.kernel, new Float32Array(gl.kernel));
+    gl.uniform2f(gl.program.uniform.screenDimension, fbo.width, fbo.height);
+    gl.uniform2f(gl.program.uniform.direction, direction.x, direction.y);
+    if(direction.x == 0)
+        gl.uniform1f(gl.program.uniform.imageDimension, fbo.height);
+    else
+        gl.uniform1f(gl.program.uniform.imageDimension, fbo.width);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texId);
+    gl.texQuad.draw();
+
+    fbo.unbind();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the canvas is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize()
+{
+    // resize window to fit to parent
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, gl.nearPlane, gl.farPlane);
+
+    resizeQuad();
+    frame();
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handlers for mouse event
+///////////////////////////////////////////////////////////////////////////////
+function handleWheel(e)
+{
+    // positive deltaY = wheel down
+    // negative deltaY = wheel up
+    if(e.deltaY != 0)
+    {
+        let deltaDistance = e.deltaY * 0.01;
+        gl.camera.distance += deltaDistance;
+        if(gl.camera.distance < gl.nearPlane)
+            gl.camera.distance = gl.nearPlane;
+        else if(gl.camera.distance > gl.farPlane)
+            gl.camera.distance = gl.farPlane;
+
+        gl.matrixView.identity();
+        gl.matrixView.rotateY(gl.camera.angle.y);
+        gl.matrixView.rotateX(gl.camera.angle.x);
+        gl.matrixView.translate(0, 0, -gl.camera.distance);
+        gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+        frame();
+    }
+
+    e.preventDefault();
+}
+
+function handleClick(e)
+{
+}
+
+function handleContextMenu(e)
+{
+    e.preventDefault(); // disable context menu
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handle pointer events: input is PointerEvent object
+///////////////////////////////////////////////////////////////////////////////
+function handlePointerDown(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    let offset = getElementOffset(this);    // get canvas offset
+    gl.pointers.push(copyPointer(pe, offset));
+
+    // remember down pointer and angles when pointer down
+    if(gl.pointers.length == 1)
+    {
+        gl.camera.pointerAngle = gl.camera.angle.clone();
+        gl.pointers.downs = []; // clear
+        gl.pointers.downs.push(copyPointer(pe, offset));
+        // handle right mouse button(0=left, 2=right)
+        gl.pointers[0].button = pe.button;
+    }
+    else if(gl.pointers.length == 2)
+    {
+        // remember second pointer
+        gl.pointers.downs.push(copyPointer(pe, offset));
+    }
+}
+
+function handlePointerUp(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    // get array index matching from gl.pointers
+    let index = gl.pointers.findIndex(pointer => pointer.id == pe.pointerId);
+    if(index >= 0) // found
+    {
+        gl.pointers.splice(index, 1);   // remove it
+        gl.pointers.distance = 0;       // clear
+    }
+}
+
+function handlePointerMove(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    // get the current moving pointer and replace it in the array
+    let offset = getElementOffset(this);    // get canvas offset
+    let index = gl.pointers.findIndex(p => p.id == pe.pointerId);
+    if(index >= 0)
+    {
+        // remember delta movement
+        gl.pointers[index].delta = new Vector2((pe.pageX - offset.x) - gl.pointers[index].x, (pe.pageY - offset.y) - gl.pointers[index].y);
+        // update
+        gl.pointers[index].x = pe.pageX - offset.x;
+        gl.pointers[index].y = pe.pageY - offset.y;
+    }
+
+    // if 2 pointers, perform zoom
+    if(gl.pointers.length == 2)
+    {
+        const SCALE_ZOOM = 0.01;
+
+        let d1 = gl.pointers[0].delta.normalize();
+        let d2 = gl.pointers[1].delta.normalize();
+        let dir = d1.add(d2).normalize();   // sum vector of 2 delta vectors
+        let v = new Vector2(gl.pointers[1].x - gl.pointers[0].x, gl.pointers[1].y - gl.pointers[0].y);
+        let dist = v.length();              // distance of 2 vectors
+
+        // zoom camera if opposite direction
+        let deltaDistance = 0;
+        if(gl.pointers.distance > 0)
+            deltaDistance = dist - gl.pointers.distance;
+        gl.pointers.distance = dist;     // remember
+        gl.camera.distance -= deltaDistance * SCALE_ZOOM;
+
+        // update camera
+        gl.matrixView.identity();
+        gl.matrixView.rotateY(gl.camera.angle.y);
+        gl.matrixView.rotateX(gl.camera.angle.x);
+        gl.matrixView.translate(0, 0, -gl.camera.distance);
+        gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+        frame();
+    }
+
+    // if 1 down, perform rotate
+    else if(gl.pointers.length == 1)
+    {
+        const SCALE_ROTATE = 0.01;
+        const SCALE_SHIFT = 0.01;
+
+        // shift if dragging right mouse button
+        if(pe.pointerType == "mouse" && gl.pointers[0].button == 2)
+        {
+            let delta = gl.pointers[0].delta.normalize();
+            delta = delta.scale(SCALE_SHIFT);
+
+            let l = new Vector3(-gl.matrixView.m[0], -gl.matrixView.m[4], -gl.matrixView.m[8]);
+            let u = new Vector3(gl.matrixView.m[1], gl.matrixView.m[5], gl.matrixView.m[9]);
+            let t = l.scale(delta.x).add(u.scale(delta.y));
+            gl.camera.target.add(new Vector3(t.x, t.y, 0));
+
+            // update camera
+            gl.matrixView.identity();
+            gl.matrixView.rotateY(gl.camera.angle.y);
+            gl.matrixView.rotateX(gl.camera.angle.x);
+            gl.matrixView.translate(0, 0, -gl.camera.distance);
+            gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+            frame();
+        }
+        else
+        {
+            gl.camera.angle.x = gl.camera.pointerAngle.x + (gl.pointers[0].y - gl.pointers.downs[0].y) * SCALE_ROTATE;
+            gl.camera.angle.y = gl.camera.pointerAngle.y + (gl.pointers[0].x - gl.pointers.downs[0].x) * SCALE_ROTATE;
+
+            // update camera
+            gl.matrixView.identity();
+            gl.matrixView.rotateY(gl.camera.angle.y);
+            gl.matrixView.rotateX(gl.camera.angle.x);
+            gl.matrixView.translate(0, 0, -gl.camera.distance);
+            gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+            frame();
+        }
+    }
+}
+
+function handlePointerCancel(pe)
+{
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
+}
+
+function handlePointerLeave(pe)
+{
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
+}
+
+function copyPointer(pe, offset={x:0,y:0})
+{
+    // return pointer data
+    return {id:pe.pointerId, x:pe.clientX - offset.x, y:pe.clientY - offset.y};
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL states
+///////////////////////////////////////////////////////////////////////////////
+function initGL(gl)
+{
+    gl.clearColor(1.0, 1.0, 1.0, 0.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);   // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+    gl.cullFace(gl.BACK);
+
+    /*
+    // default light
+    gl.light = new Light(0, 0, 1, 0);
+    //gl.light.position.normalize(); //@@ fix normalize()
+    gl.light.color.set(1.0, 1.0, 1.0, 1.0);        // light color
+    gl.light.attenuations.set(1, 0.0, 0); // attenuations (constant, linear, quad)
+    log("    Light Position: " + gl.light.position);
+    log("       Light Color: " + gl.light.color);
+    log("Light Attenuations: " + gl.light.attenuations);
+    log();
+
+    // default material
+    gl.material = new Material(0.7, 0.7, 0.7, 1.0); // with default diffuse
+    gl.material.ambient.set(0.1, 0.1, 0.1, 1.0);
+    gl.material.specular.set(0.1, 0.1, 0.1, 1);
+    gl.material.shininess = 32;
+    log("  Material Ambient: " + gl.material.ambient);
+    log("  Material Diffuse: " + gl.material.diffuse);
+    log(" Material Specualr: " + gl.material.specular);
+    log("Material Shininess: " + gl.material.shininess);
+    log();
+    */
+
+    // set near and far clip planes
+    gl.nearPlane = 1;
+    gl.farPlane = 2000;
+
+    // init camera
+    gl.camera = {};
+    gl.camera.target = new Vector3(0, 0, 0);
+    gl.camera.angle = new Vector2(0, 0);
+    gl.camera.quaternion = new Quaternion();
+    gl.camera.distance = CAMERA_Z;
+
+    // init transform matrices
+    //let halfWidth = gl.canvas.width / 2;
+    //gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    //gl.matrixProjection = Matrix4.makePerspective(45, halfWidth/gl.canvas.height, gl.nearPlane, gl.farPlane);
+    gl.matrixModel = new Matrix4();
+    gl.matrixView = new Matrix4();
+    gl.matrixNormal = new Matrix4();
+    gl.matrixProjection = new Matrix4();
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    //gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL(gl)
+{
+    initVertexAttribArrays(gl);
+
+    gl.shaderPrograms = {};
+
+    let width = Math.floor(gl.canvas.width / 2);
+    let height = gl.canvas.height;
+    createShaderProgram(gl, "files/glsl/gles_postDefault.vert", "files/glsl/gles_postDefault.frag").then(program =>
+    {
+        gl.useProgram(program);
+        gl.uniform1i(program.uniform.map0, 0);
+        gl.uniform2f(program.uniform.screenDimension, width, height);
+        gl.shaderPrograms["postDefault"] = program;
+        frame();
+    });
+
+    createShaderProgram(gl, "files/glsl/gles_blurGaussian.vert", "files/glsl/gles_blurGaussian.frag").then(program =>
+    {
+        gl.useProgram(program);
+        gl.uniform1i(program.uniform.map0, 0);
+        gl.uniform2f(program.uniform.screenDimension, width, height);
+        gl.uniform1fv(program.uniform.kernel, new Float32Array(gl.kernel));
+        gl.shaderPrograms["gaussian"] = program;
+        frame();
+    });
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// start rendering loop
+// it calls frame() and postFrame() in the loop. And remember the frame time &
+// run time every frame.
+///////////////////////////////////////////////////////////////////////////////
+function startRendering(gl)
+{
+    // try to find "requestAnimationFrame" function
+    // if it is not available use setTimeout() instead
+    let requestAnimationFrame = getRequestAnimationFrameFunction(window);
+
+    // prepare rendering loop
+    log("\nStarting rendering loop...\n");
+
+    let timer = new Timer();
+    let fps = new FrameRate("framerate");
+    let frameCallback = function()
+    {
+        fps.tick();
+        gl.frameTime = timer.getFrameTime(); // get elapsed time as ms
+        gl.runTime += gl.frameTime;
+        frame();
+        postFrame();
+        requestAnimationFrame(frameCallback);
+    };
+
+    // start rendering loop
+    timer.start();
+    gl.runTime = 0;
+    requestAnimationFrame(frameCallback);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init HTML DOM elements
+///////////////////////////////////////////////////////////////////////////////
+function initHtml()
+{
+    let rangeSigma = document.form1.rangeSigma;
+    rangeSigma.value = SIGMA;
+    rangeSigma.addEventListener("input", () =>
+    {
+        document.getElementById("labelSigma").innerText = rangeSigma.value;
+        // update kernel size
+        gl.sigma = parseFloat(rangeSigma.value);
+        gl.halfKernelSize = Math.floor(computeGaussianKernelSize(gl.sigma) / 2) + 1;
+        if(gl.halfKernelSize > MAX_HALF_KERNEL)
+            gl.halfKernelSize = MAX_HALF_KERNEL;
+        //console.log(computeGaussianKernelSize(gl.sigma));
+
+        // build half of gaussian kernel
+        gl.kernel = generateHalfGaussianKernel(SIGMA, gl.halfKernelSize);
+        gl.kernel = resizeHalfKernel(gl.kernel, MAX_HALF_KERNEL); // pad 0s
+
+        document.getElementById("textKernelSize").innerText = gl.halfKernelSize;
+        document.getElementById("textKernelSum").innerText = computeHalfKernelSum(gl.kernel).toFixed(5);
+        document.getElementById("textArrayLength").innerText = gl.kernel.length;
+        printKernel(gl.kernel);
+
+        frame();
+    });
+
+    let radioDirection = document.form1.radioDirection;
+    radioDirection.value = "both";
+    radioDirection.forEach(radio =>
+    {
+        radio.onclick = () =>
+        {
+            if(radio.value == "horizontal")
+                gl.convolveMode = 1;
+            else if(radio.value == "vertical")
+                gl.convolveMode = 2;
+            else
+                gl.convolveMode = 0; // both
+
+            frame();
+        };
+    });
+
+    let textKernelSize = document.getElementById("textKernelSize");
+    textKernelSize.innerText = gl.halfKernelSize;
+    let textArrayLength = document.getElementById("textArrayLength");
+    textArrayLength.innerText = gl.kernel.length; // should be MAX_HALF_KERNEL
+    let textKernelSum = document.getElementById("textKernelSum");
+    textKernelSum.innerText = computeHalfKernelSum(gl.kernel).toFixed(5);
+    printKernel(gl.kernel);
+}
+
+function printKernel(kernel)
+{
+    let div = document.getElementById("kernelvalue");
+    div.innerHTML = "";
+    for(let i = 0; i < kernel.length; ++i)
+    {
+        div.innerHTML += "<div style='display:flex;gap:5px'><div style='flex:0 0 20px'>" + i + ": </div><div>" + kernel[i] + "</div></div>";
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// resize quad to fit the screen by keeping aspect ratio
+///////////////////////////////////////////////////////////////////////////////
+function resizeQuad()
+{
+    if(!gl.tex0 || !gl.canvas)
+        return;
+
+    let halfWidth = Math.floor(gl.canvas.width / 2);
+    let ca = halfWidth / gl.canvas.height;
+    let ta = gl.tex0.width / gl.tex0.height;
+
+    let s = 1;
+    if(ta > ca) // image is wider than canvas
+        s = halfWidth / gl.tex0.width;
+    else // image is narrow than canvas
+        s = gl.canvas.height / gl.tex0.height;
+
+    let w = s * gl.tex0.width;
+    let h = s * gl.tex0.height;
+    let dw = (halfWidth - w) / 2;
+    let dh = (gl.canvas.height - h) / 2;
+    gl.quad.set(dw, w+dw, dh, h+dh);
+
+    //console.log(gl.quad);
+}
+</script>
+
+</head>
+
+<body>
+<div class="contentblock">
+
+<div class="mainblock">
+<canvas id="webglView" width="300" height="300">
+</canvas>
+</div>
+
+<div class="rightblock">
+<h2>
+WebGL: Gaussian Blur
+</h2>
+
+<form name="form1">
+<span>Sigma (&sigma;):</span>
+<br>
+<div class="flexbox">
+<input class="flexcol1" type="range" name="rangeSigma" min="0" max="10" step="0.1" value="5"><label class="flexcol2" id="labelSigma" class="col3">5</label>
+</div>
+<br>
+
+<div>
+Convolution Direction:
+<br>
+<input type="radio" name="radioDirection" id="radioBoth" value="both">
+<label for="radioBoth">Both</label>
+&nbsp;
+<input type="radio" name="radioDirection" id="radioHorizontal" value="horizontal">
+<label for="radioHorizontal">Horizontal</label>
+&nbsp;
+<input type="radio" name="radioDirection" id="radioVertical" value="vertical">
+<label for="radioVertical">Vertical</label>
+</div>
+</form>
+<br>
+
+<div class="gridbox">
+<div class="gridcol1">Half Kernel Size: </div><div class="gridcol2" id="textKernelSize">0</div>
+<div class="gridcol1">Kernel Sum: </div><div class="gridcol2" id="textKernelSum">0</div>
+<div class="gridcol1">Array Length: </div><div class="gridcol2" id="textArrayLength">0</div>
+</div>
+<br>
+<div class="kernelinfo">
+<strong>Kernel:</strong>
+<div id="kernelvalue">
+</div>
+</div>
+
+</div>
+<!-- end of rightblock -->
+
+</div>
+<!-- end of contentblock -->
+
+</body>
+</html>
