@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html>
+
+<!-- ==========================================================================
+test PBR
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2015-05-15
+UPDATED: 2025-06-10
+===============================================================================
+-->
+
+<head>
+<title>WebGL PBR</title>
+<meta name="generator" content="editplus">
+<meta name="author" content="Song Ho Ahn">
+<meta name="keywords" content="">
+<meta name="description" content="">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    font-size:12px;
+}
+h3 {
+    margin-bottom:5px;
+}
+p {
+    margin:0 0 1em 0;
+}
+.contentblock {
+    display:flex;
+    position:absolute;
+    left:0px;
+    right:0px;
+    top:0px;
+    bottom:0px;
+    padding:10px;
+    line-height:0;
+}
+.mainblock {
+    position:relative;
+    flex:1 1 300px;
+    border:1px solid #ddd;
+}
+.rightblock {
+    flex:0 0 350px;
+    height:100%;
+    overflow:auto;
+    margin-left:10px;
+    line-height:110%;
+}
+#webglView {
+    width:100%;
+    height:100%;
+    touch-action:none; /* prevent browser handle pointer events */
+}
+#info {
+    position:absolute;
+    top:0;
+    right:0;
+    margin-top:5px;
+    margin-right:5px;
+    line-height:110%;
+}
+hr {
+    height:1px;
+    background-color:#aaa;
+    border:none;
+}
+.gridbox {
+    display:grid;
+    grid-template-columns:60px 195px;
+    gap:5px;
+    font-size:0.8em;
+}
+.gridcol1 {
+    text-align:right;
+    font-weight:bold;
+}
+.gridcol2 {
+    word-wrap:break-word;
+}
+/* tabs */
+.tabs {
+    display:flex;
+    flex-wrap:wrap;
+    width:100%;
+    background-color:#f8f8f8;
+    box-sizing:border-box;
+    padding:0;
+}
+.tabs input[type=radio] {
+    display:none;
+}
+.tablabel {
+    font-weight:bold;
+    cursor:pointer;
+    padding:10px 20px;
+    color:#666;
+    background-color:#f8f8f8;
+    transition:color 0.2s, background 0.2s;
+    border-top:3px solid transparent;
+    border-left:1px solid transparent;
+    border-right:1px solid transparent;
+    border-bottom:none;
+ }
+.tablabel:hover {
+    color:#000;
+    background-color:#ddd;
+}
+.tabs input:checked + .tablabel {
+    color:#000;
+    background-color:#fff;
+    border-top:2px solid #000;
+    border-left:1px solid #aaa;
+    border-right:1px solid #aaa;
+    border-bottom:1px solid #fff;
+    position:relative;
+    top:1px;
+}
+.tabs .tabcontent {
+    display:none;
+    width:100%;
+    margin:0;
+    padding:10px;
+    border:1px solid #aaa;
+    order:99;
+}
+.tabs input:checked + .tablabel + .tabcontent {
+    display:block;
+    background-color:#fff;
+}
+/* GUI */
+fieldset {
+    border:1px solid #eee;
+}
+legend {
+    font-size:1.2em;
+    font-weight:bold;
+}
+.slidergroup {
+    margin-bottom:10px;
+}
+.flexblock {
+    display:flex;
+    align-items:center;
+}
+.col1 {
+    flex:0 0 60px;
+    font-size:12px;
+}
+.col3 {
+    flex:0 0 24px;
+    font-size:12px;
+}
+.subheader {
+    font-weight:bold;
+    margin-top:5px;
+}
+input[type="range"] {
+    flex:1 1 auto;
+}
+input[type="button"] {
+    width:100%;
+}
+</style>
+
+
+
+<!-- JavaScript -->
+<script src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script src="files/js/Vectors.js"></script>
+<script src="files/js/Matrices.js"></script>
+<script src="files/js/Light.js"></script>
+<script src="files/js/Material.js"></script>
+<script src="files/js/ObjModel.js"></script>
+<script src="files/js/Sphere.js"></script>
+<script src="files/js/webglUtils.js"></script>
+
+<script>
+
+// global vars
+let gl = null;
+let vboVertex;  // vertex attributes
+let vboIndex;   // index attribute
+
+// constants
+const ROUGHNESS = 0.5;
+const METALNESS = 0.5;
+const REFLECTANCE = 0.04;   // plastic
+const IRRADIANCE = 2;       // total amount of light energy from all direction
+const AMBIENT = new Vector3(0, 0, 0);           // material ambient (r,g,b)
+const DIFFUSE = new Vector3(0.8, 0.8, 0.8);     // material diffuse (r,g,b)
+const LIGHT_POS = new Vector4(0, 5, 0, 1);   // (x,y,z,w)
+const LIGHT_COLOR = new Vector3(1, 1, 1);       // (r,g,b)
+const POINT_RADIUS = 20;
+const CAMERA_ANGLE = new Vector2(30, -45);      // (x, y) in degree
+const CAMERA_Z = 30;
+
+
+///////////////////////////////////////////////////////////////////////////////
+// main entry point
+///////////////////////////////////////////////////////////////////////////////
+document.addEventListener("DOMContentLoaded", () =>
+{
+    let success = initWebGL("webglView");
+    if(!success)
+        return;
+
+    initGui();
+});
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init WebGL
+///////////////////////////////////////////////////////////////////////////////
+function initWebGL(canvasId)
+{
+    try{
+
+    let canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        let node = canvas.parentNode;
+        let message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        node.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                         message +
+                         "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // get gl context
+    gl = getContextGL(canvas)
+    if(!gl)
+    {
+        Logger.show();
+        log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // remember canvas
+    gl.canvas = canvas;
+
+    // init gl and glsl
+    initGL(gl);
+    initGLSL(gl);
+    log("WebGL is initialized.");
+
+    // init app ===============================================================
+
+    gl.nearPlane = 1;
+    gl.farPlane = 1000;
+
+    initPoint();
+    initSphere();
+
+    // init pbr params
+    gl.roughness = ROUGHNESS;
+    gl.metalness = METALNESS;
+    gl.reflectance = REFLECTANCE; // f0
+    gl.irradiance = IRRADIANCE;
+
+    // load OBJ
+    let obj = new ObjModel(gl);
+    obj.read("files/models/cube_room.obj").then(obj => initVBOs(obj));
+
+    // load a texture and redraw the scene after it is loaded
+    //gl.tex0 = loadTexture(gl, "files/images/envmap01_diffuse.jpg", false, frame);
+    gl.tex0 = loadTexture(gl, "files/images/envmap01.bmp", false, frame);
+    gl.tex1 = loadTexture(gl, "files/images/envmap01_diffuse.bmp", false, frame);
+
+    // init array of pointer objects
+    gl.pointers = [];
+
+    // register event handlers
+    window.addEventListener("resize",  handleResize);
+    log("Added window resize envent listener, handleResize().");
+    canvas.addEventListener("click", handleClick);
+    log("Added canvas click event listener, handleClick().");
+    canvas.addEventListener("contextmenu", handleContextMenu);
+    log("Added canvas contextmenu event listener, handleContextMenu().");
+    canvas.addEventListener("wheel", handleWheel);
+    log("Added canvas wheel event listeners, handleWheel()");
+    // canvas pointer events
+    canvas.addEventListener("pointerdown", handlePointerDown, false);
+    log("Added canvas pointerdown event listeners, handlePointerDown()");
+    canvas.addEventListener("pointerup", handlePointerUp, false);
+    log("Added canvas pointerup event listeners, handlePointerUp()");
+    canvas.addEventListener("pointermove", handlePointerMove, false);
+    log("Added canvas pointermove event listeners, handlePointerMove()");
+    canvas.addEventListener("pointercancel", handlePointerCancel, false);
+    log("Added canvas pointercancel event listeners, handlePointerCancel()");
+    canvas.addEventListener("pointerleave", handlePointerLeave, false);
+    log("Added canvas pointerleave event listeners, handlePointerLeave()");
+
+    handleResize();
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+    }
+
+    return true;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    drawRoom();
+    drawLight();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// post frame
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw room
+///////////////////////////////////////////////////////////////////////////////
+function drawRoom()
+{
+    // set active program
+    gl.program = gl.shaderPrograms["pbr"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    // compute model-view transform
+    gl.matrixModel.identity();
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+
+    // compute normal matrix
+    gl.matrixNormal = gl.matrixModelView.getRotationMatrix();
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+
+    // compute model-view-projection matrix
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    // transform light from world-space to eye-space
+    let esLight = gl.matrixModelView.transform(gl.light.position);
+    gl.uniform4fv(gl.program.uniform.lightPosition, esLight.toFloat32Array());
+
+    // pass color
+    gl.uniform4fv(gl.program.uniform.lightColor, gl.light.getColor());
+
+    // pass attenuation uniform array
+    gl.uniform3fv(gl.program.uniform.lightAttenuations, gl.light.getAttenuations());
+
+    // pass material
+    gl.uniform4fv(gl.program.uniform.materialAmbient, gl.material.getAmbient());
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material.getDiffuse());
+    //gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material.getSpecular());
+    //gl.uniform1f(gl.program.uniform.materialShininess, gl.material.shininess);
+
+    // pass pbr params
+    gl.uniform1f(gl.program.uniform.roughness, gl.roughness);
+    gl.uniform1f(gl.program.uniform.metalness, gl.metalness);
+    gl.uniform1f(gl.program.uniform.reflectance, gl.reflectance);
+    gl.uniform1f(gl.program.uniform.irradiance, gl.irradiance);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.tex1);
+
+    // draw model
+    if(vboVertex && vboIndex)
+    {
+        gl.bindBuffer(gl.ARRAY_BUFFER, vboVertex);
+        gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, vboVertex.normalOffset);
+        gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 0, vboVertex.texCoordOffset);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vboIndex);
+        gl.drawElements(gl.TRIANGLES, vboIndex.indexCount, gl.UNSIGNED_SHORT, 0);
+    }
+
+    drawSphere();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw sphere
+///////////////////////////////////////////////////////////////////////////////
+function drawSphere()
+{
+    // compute matrices
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.sphere.matrix);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+    gl.matrixNormal = gl.matrixModelView.getRotationMatrix();
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([1.0,1.0,0.0,1]));
+
+    // draw sphere with interleaved mode
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.sphere.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, gl.sphere.stride, 0);
+    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, gl.sphere.stride, 12);
+    gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, gl.sphere.stride, 24);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.sphere.vboIndex);
+    gl.drawElements(gl.TRIANGLES, gl.sphere.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw point lights
+///////////////////////////////////////////////////////////////////////////////
+function drawLight()
+{
+    // set active program
+    gl.program = gl.shaderPrograms["point"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+
+    // draw light
+    gl.matrixModel.identity();
+    gl.matrixModel.translate(gl.light.position.x, gl.light.position.y, gl.light.position.z);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, gl.matrixModel.m);
+
+    gl.uniform4fv(gl.program.uniform.color, gl.light.getColor());
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboPoint);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.POINTS, 0, 1);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the canvas is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize()
+{
+    // resize window to fit to parent
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+    //log(gl.canvas.parentNode.clientWidth + "x" + gl.canvas.parentNode.clientHeight);
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, gl.nearPlane, gl.farPlane);
+
+    frame();
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handlers for mouse event
+///////////////////////////////////////////////////////////////////////////////
+function handleWheel(e)
+{
+    // positive deltaY = wheel down
+    // negative deltaY = wheel up
+    if(e.deltaY != 0)
+    {
+        let deltaDistance = e.deltaY * 0.1;
+        gl.camera.distance += deltaDistance;
+        if(gl.camera.distance < gl.nearPlane)
+            gl.camera.distance = gl.nearPlane;
+        else if(gl.camera.distance > gl.farPlane)
+            gl.camera.distance = gl.farPlane;
+
+        gl.matrixView.identity();
+        gl.matrixView.rotateY(gl.camera.angle.y);
+        gl.matrixView.rotateX(gl.camera.angle.x);
+        gl.matrixView.translate(0, 0, -gl.camera.distance);
+        gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+        frame();
+    }
+
+    e.preventDefault();
+}
+
+function handleClick(e)
+{
+}
+
+function handleContextMenu(e)
+{
+    e.preventDefault(); // disable context menu
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handle pointer events: input is PointerEvent object
+///////////////////////////////////////////////////////////////////////////////
+function handlePointerDown(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    let offset = getElementOffset(this);    // get canvas offset
+    gl.pointers.push(copyPointer(pe, offset));
+
+    // remember down pointer and angles when pointer down
+    if(gl.pointers.length == 1)
+    {
+        gl.camera.pointerAngle = gl.camera.angle.clone();
+        gl.pointers.downs = []; // clear
+        gl.pointers.downs.push(copyPointer(pe, offset));
+        // handle right mouse button(0=left, 2=right)
+        gl.pointers[0].button = pe.button;
+    }
+    else if(gl.pointers.length == 2)
+    {
+        // remember second pointer
+        gl.pointers.downs.push(copyPointer(pe, offset));
+    }
+}
+
+function handlePointerUp(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    // get array index matching from gl.pointers
+    let index = gl.pointers.findIndex(pointer => pointer.id == pe.pointerId);
+    if(index >= 0) // found
+    {
+        gl.pointers.splice(index, 1);   // remove it
+        gl.pointers.distance = 0;       // clear
+    }
+}
+
+function handlePointerMove(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    // get the current moving pointer and replace it in the array
+    let offset = getElementOffset(this);    // get canvas offset
+    let index = gl.pointers.findIndex(p => p.id == pe.pointerId);
+    if(index >= 0)
+    {
+        // remember delta movement
+        gl.pointers[index].delta = new Vector2((pe.pageX - offset.x) - gl.pointers[index].x, (pe.pageY - offset.y) - gl.pointers[index].y);
+        // update
+        gl.pointers[index].x = pe.pageX - offset.x;
+        gl.pointers[index].y = pe.pageY - offset.y;
+    }
+
+    // if 2 pointers, perform zoom
+    if(gl.pointers.length == 2)
+    {
+        const SCALE_ZOOM = 0.1;
+
+        let d1 = gl.pointers[0].delta.normalize();
+        let d2 = gl.pointers[1].delta.normalize();
+        let dir = d1.add(d2).normalize();   // sum vector of 2 delta vectors
+        let v = new Vector2(gl.pointers[1].x - gl.pointers[0].x, gl.pointers[1].y - gl.pointers[0].y);
+        let dist = v.length();              // distance of 2 vectors
+
+        // zoom camera if opposite direction
+        let deltaDistance = 0;
+        if(gl.pointers.distance > 0)
+            deltaDistance = dist - gl.pointers.distance;
+        gl.pointers.distance = dist;     // remember
+        gl.camera.distance -= deltaDistance * SCALE_ZOOM;
+
+        // update camera
+        gl.matrixView.identity();
+        gl.matrixView.rotateY(gl.camera.angle.y);
+        gl.matrixView.rotateX(gl.camera.angle.x);
+        gl.matrixView.translate(0, 0, -gl.camera.distance);
+        gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+        frame();
+    }
+
+    // if 1 down, perform rotate
+    else if(gl.pointers.length == 1)
+    {
+        const SCALE_ROTATE = 0.01;
+        const SCALE_SHIFT = 0.1;
+
+        // shift if dragging right mouse button
+        if(pe.pointerType == "mouse" && gl.pointers[0].button == 2)
+        {
+            let delta = gl.pointers[0].delta.normalize();
+            delta = delta.scale(SCALE_SHIFT);
+
+            let l = new Vector3(-gl.matrixView.m[0], -gl.matrixView.m[4], -gl.matrixView.m[8]);
+            let u = new Vector3(gl.matrixView.m[1], gl.matrixView.m[5], gl.matrixView.m[9]);
+            let t = l.scale(delta.x).add(u.scale(-delta.y));
+            gl.camera.target.add(new Vector3(t.x, t.y, 0));
+
+            // update camera
+            gl.matrixView.identity();
+            gl.matrixView.rotateY(gl.camera.angle.y);
+            gl.matrixView.rotateX(gl.camera.angle.x);
+            gl.matrixView.translate(0, 0, -gl.camera.distance);
+            gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+            frame();
+        }
+        else
+        {
+            gl.camera.angle.x = gl.camera.pointerAngle.x + (gl.pointers[0].y - gl.pointers.downs[0].y) * SCALE_ROTATE;
+            gl.camera.angle.y = gl.camera.pointerAngle.y + (gl.pointers[0].x - gl.pointers.downs[0].x) * SCALE_ROTATE;
+
+            // update camera
+            gl.matrixView.identity();
+            gl.matrixView.rotateY(gl.camera.angle.y);
+            gl.matrixView.rotateX(gl.camera.angle.x);
+            gl.matrixView.translate(0, 0, -gl.camera.distance);
+            gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+            frame();
+        }
+    }
+}
+
+function handlePointerCancel(pe)
+{
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
+}
+
+function handlePointerLeave(pe)
+{
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
+}
+
+function copyPointer(pe, offset={x:0,y:0})
+{
+    // return pointer data
+    return {id:pe.pointerId, x:pe.clientX - offset.x, y:pe.clientY - offset.y};
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL(gl)
+{
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);                       // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);                        // enable culling backface
+    gl.cullFace(gl.BACK);
+
+    // default light
+    gl.light = new Light(LIGHT_POS.x, LIGHT_POS.y, LIGHT_POS.z, LIGHT_POS.w);
+    //gl.light = new Light(0,0,1,0);
+    gl.light.color.set(LIGHT_COLOR.x, LIGHT_COLOR.y, LIGHT_COLOR.z, 1); // (r,g,b,a)
+    gl.light.attenuations.set(1, 0, 0);
+    log(gl.light);
+
+    // default material
+    gl.material = new Material(DIFFUSE.x, DIFFUSE.y, DIFFUSE.z, 1.0); // with diffuse
+    gl.material.ambient.set(AMBIENT.x, AMBIENT.y, AMBIENT.z, 1.0);
+    gl.material.specular.set(1, 1, 1, 1);
+    gl.material.shininess = 64;
+    log(gl.material);
+
+    // camera
+    gl.camera = {};
+    gl.camera.target = new Vector3(0, 0, 0);
+    gl.camera.angle = new Vector2(deg2rad(CAMERA_ANGLE.x), deg2rad(CAMERA_ANGLE.y));
+    gl.camera.distance = CAMERA_Z;
+
+    // init matrices
+    gl.matrixView = new Matrix4();
+    gl.matrixView.rotateY(gl.camera.angle.y);
+    gl.matrixView.rotateX(gl.camera.angle.x);
+    gl.matrixView.translate(0, 0, -gl.camera.distance);
+    gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+
+    gl.matrixModel = new Matrix4();
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+
+    // init projection matrix and viewport
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(45, gl.canvas.width/gl.canvas.height, gl.nearPlane, gl.farPlane);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL()
+{
+    initVertexAttribArrays(gl);
+
+    // load shaders
+    gl.shaderPrograms = {}; // associative array
+
+    // load phong shader
+    createShaderProgram(gl, "files/glsl/gles_phong.vert", "files/glsl/gles_phong.frag").then(program =>
+    {
+        if(program)
+        {
+            gl.shaderPrograms["phong"] = program;
+            frame();
+        }
+    });
+
+    // load phong shader with 1 texture
+    createShaderProgram(gl, "files/glsl/gles_phongTex.vert", "files/glsl/gles_phongTex.frag").then(program =>
+    {
+        if(program)
+        {
+            gl.shaderPrograms["phongTex"] = program;
+            // setup uniforms
+            gl.useProgram(program);
+            gl.uniform1i(program.uniform.map0, 0);
+        }
+    });
+
+    // load blinn shader
+    createShaderProgram(gl, "files/glsl/gles_blinn.vert", "files/glsl/gles_blinn.frag").then(program =>
+    {
+        if(program)
+        {
+            gl.shaderPrograms["blinn"] = program;
+        }
+    });
+
+    // load blinn shader with texture
+    createShaderProgram(gl, "files/glsl/gles_blinnTex.vert", "files/glsl/gles_blinnTex.frag").then(program =>
+    {
+        if(program)
+        {
+            gl.shaderPrograms["blinnTex"] = program;
+        }
+    });
+
+    // load shader for points
+    createShaderProgram(gl, "files/glsl/gles_point.vert", "files/glsl/gles_point.frag").then(program =>
+    {
+        if(program)
+        {
+            gl.shaderPrograms["point"] = program;
+            // setup uniforms
+            gl.useProgram(program);
+            gl.uniform1f(program.uniform.pointSize, POINT_RADIUS);
+        }
+    });
+
+    // load shader for pbr
+    createShaderProgram(gl, "files/glsl/gles_pbr.vert", "files/glsl/gles_pbr.frag").then(program =>
+    {
+        if(program)
+        {
+            gl.shaderPrograms["pbr"] = program;
+            // setup uniforms
+            gl.useProgram(program);
+            gl.uniform4fv(program.uniform.materialAmbient, gl.material.getAmbient());
+            gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
+            gl.uniform4fv(program.uniform.lightColor, gl.light.getColor());
+            gl.uniform3fv(program.uniform.lightAttenuations, gl.light.getAttenuations());
+            gl.uniform1f(program.uniform.metalness, 0.2);
+            gl.uniform1f(program.uniform.roughness, 0.5);
+            gl.uniform1f(program.uniform.reflectance, 0.5);
+            gl.uniform1f(program.uniform.irradiance, 2);
+
+            frame();
+        }
+    });
+
+    gl.shadingModel = "pbr";  // default shading
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create vbo for obj model
+///////////////////////////////////////////////////////////////////////////////
+function initVBOs(obj)
+{
+    log(obj);
+
+    // re-normalize normals
+    obj.normalize();
+    log("Re-normalized the surface normals of OBJ.");
+
+    vboVertex = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboVertex);
+    gl.bufferData(gl.ARRAY_BUFFER, obj.vertices.byteLength + obj.normals.byteLength + obj.texCoords.byteLength, gl.STATIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, obj.vertices);
+    gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength, obj.normals);
+    gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength + obj.normals.byteLength, obj.texCoords);
+    vboVertex.normalOffset = obj.vertices.byteLength;
+    vboVertex.texCoordOffset = obj.vertices.byteLength + obj.normals.byteLength;
+
+    vboIndex = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vboIndex);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, obj.indices, gl.STATIC_DRAW);
+    vboIndex.indexCount = obj.indices.length;
+
+    //obj.clearArrays();
+
+    frame();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create a VBO for a 3D point
+///////////////////////////////////////////////////////////////////////////////
+function initPoint()
+{
+    let points = new Float32Array([0,0,0]); // (x,y,z)
+
+    gl.vboPoint = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboPoint);
+    gl.bufferData(gl.ARRAY_BUFFER, points, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create a VBO for a sphere
+///////////////////////////////////////////////////////////////////////////////
+function initSphere()
+{
+    gl.sphere = new Sphere(gl, 3.0, 36, 18, true);
+    gl.sphere.matrix = new Matrix4();
+    gl.sphere.matrix.translate(-7.5, -7.5, 0);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init UI
+function initGui()
+{
+    // light position
+    document.getElementById("labelLightPosX").innerHTML = LIGHT_POS.x;
+    document.form1.lightPosX.value = LIGHT_POS.x;
+    document.form1.lightPosX.oninput = function()
+    {
+        document.getElementById("labelLightPosX").innerHTML = this.value;
+        translateLight();
+    };
+
+    document.getElementById("labelLightPosY").innerHTML = LIGHT_POS.y;
+    document.form1.lightPosY.value = LIGHT_POS.y;
+    document.form1.lightPosY.oninput = function()
+    {
+        document.getElementById("labelLightPosY").innerHTML = this.value;
+        translateLight();
+    };
+
+    document.getElementById("labelLightPosZ").innerHTML = LIGHT_POS.z;
+    document.form1.lightPosZ.value = LIGHT_POS.z;
+    document.form1.lightPosZ.oninput = function()
+    {
+        document.getElementById("labelLightPosZ").innerHTML = this.value;
+        translateLight();
+    };
+
+    // light color
+    document.getElementById("labelLightColorR").innerHTML = LIGHT_COLOR.x; // red
+    document.form1.lightColorR.value = LIGHT_COLOR.x;
+    document.form1.lightColorR.oninput = function()
+    {
+        document.getElementById("labelLightColorR").innerHTML = this.value;
+        updateLightColor();
+    };
+    document.getElementById("labelLightColorG").innerHTML = LIGHT_COLOR.y; // green
+    document.form1.lightColorG.value = LIGHT_COLOR.y;
+    document.form1.lightColorG.oninput = function()
+    {
+        document.getElementById("labelLightColorG").innerHTML = this.value;
+        updateLightColor();
+    };
+    document.getElementById("labelLightColorB").innerHTML = LIGHT_COLOR.z; // blue
+    document.form1.lightColorB.value = LIGHT_COLOR.z;
+    document.form1.lightColorB.oninput = function()
+    {
+        document.getElementById("labelLightColorB").innerHTML = this.value;
+        updateLightColor();
+    };
+
+    // material ambient
+    document.getElementById("labelAmbientR").innerHTML = AMBIENT.x; // r
+    document.form1.ambientR.value = AMBIENT.x;
+    document.form1.ambientR.oninput = function()
+    {
+        document.getElementById("labelAmbientR").innerHTML = this.value;
+        updateMaterial();
+    };
+    document.getElementById("labelAmbientG").innerHTML = AMBIENT.y; // g
+    document.form1.ambientG.value = AMBIENT.y;
+    document.form1.ambientG.oninput = function()
+    {
+        document.getElementById("labelAmbientG").innerHTML = this.value;
+        updateMaterial();
+    };
+    document.getElementById("labelAmbientB").innerHTML = AMBIENT.z; // b
+    document.form1.ambientB.value = AMBIENT.z;
+    document.form1.ambientB.oninput = function()
+    {
+        document.getElementById("labelAmbientB").innerHTML = this.value;
+        updateMaterial();
+    };
+
+    // material diffuse
+    document.getElementById("labelDiffuseR").innerHTML = DIFFUSE.x; // r
+    document.form1.diffuseR.value = DIFFUSE.x;
+    document.form1.diffuseR.oninput = function()
+    {
+        document.getElementById("labelDiffuseR").innerHTML = this.value;
+        updateMaterial();
+    };
+    document.getElementById("labelDiffuseG").innerHTML = DIFFUSE.y; // g
+    document.form1.diffuseG.value = DIFFUSE.y;
+    document.form1.diffuseG.oninput = function()
+    {
+        document.getElementById("labelDiffuseG").innerHTML = this.value;
+        updateMaterial();
+    };
+    document.getElementById("labelDiffuseB").innerHTML = DIFFUSE.z; // b
+    document.form1.diffuseB.value = DIFFUSE.z;
+    document.form1.diffuseB.oninput = function()
+    {
+        document.getElementById("labelDiffuseB").innerHTML = this.value;
+        updateMaterial();
+    };
+
+    // pbr params
+    document.getElementById("labelRoughness").innerText = ROUGHNESS;
+    document.form1.roughness.value = ROUGHNESS;
+    document.form1.roughness.oninput = function()
+    {
+        //console.log(this.value);
+        document.getElementById("labelRoughness").innerText = this.value;
+        gl.roughness = parseFloat(this.value);
+        frame();
+    };
+    document.getElementById("labelMetalness").innerText = METALNESS;
+    document.form1.metalness.value = METALNESS;
+    document.form1.metalness.oninput = function()
+    {
+        //console.log(this.value);
+        document.getElementById("labelMetalness").innerText = this.value;
+        gl.metalness = parseFloat(this.value);
+        frame();
+    };
+    document.getElementById("labelReflectance").innerText = REFLECTANCE;
+    document.form1.reflectance.value = REFLECTANCE;
+    document.form1.reflectance.oninput = function()
+    {
+        //console.log(this.value);
+        document.getElementById("labelReflectance").innerText = this.value;
+        gl.reflectance = parseFloat(this.value);
+        frame();
+    };
+    document.getElementById("labelIrradiance").innerText = IRRADIANCE;
+    document.form1.irradiance.value = IRRADIANCE;
+    document.form1.irradiance.oninput = function()
+    {
+        //console.log(this.value);
+        document.getElementById("labelIrradiance").innerText = this.value;
+        gl.irradiance = parseFloat(this.value);
+        frame();
+    };
+}
+
+function translateLight()
+{
+    let x = document.form1.lightPosX.value;
+    let y = document.form1.lightPosY.value;
+    let z = document.form1.lightPosZ.value;
+    gl.light.setPosition(x, y, z, 1);
+    frame();
+}
+function updateLightColor()
+{
+    let r = document.form1.lightColorR.value;
+    let g = document.form1.lightColorG.value;
+    let b = document.form1.lightColorB.value;
+    gl.light.setColor(r, g, b, 1);
+    frame();
+}
+function updateMaterial()
+{
+    let r = document.form1.ambientR.value;
+    let g = document.form1.ambientG.value;
+    let b = document.form1.ambientB.value;
+    gl.material.ambient.set(r, g, b, 1);
+
+    r = document.form1.diffuseR.value;
+    g = document.form1.diffuseG.value;
+    b = document.form1.diffuseB.value;
+    gl.material.diffuse.set(r, g, b, 1);
+
+    frame();
+}
+function setShadingModel(shading)
+{
+    log(shading);
+    if(gl.shadingModel != shading)
+    {
+        gl.shadingModel = shading;
+        frame();
+    }
+}
+
+</script>
+
+</head>
+
+
+
+<body>
+
+<div class="contentblock">
+
+<div class="mainblock">
+<canvas id="webglView" width="512" height="512">
+</canvas>
+</div><!-- end of mainblock -->
+
+
+<div class="rightblock">
+<h2>
+WebGL PBR
+</h2>
+
+<form name="form1">
+
+<fieldset class="slidergroup">
+<legend>PBR Parameters</legend>
+<div class="flexblock">
+<span class="col1">Roughness:</span><input type="range" name="roughness" min="0" max="1" step="0.01" value="0.5"><label id="labelRoughness" class="col3">0.5</label>
+</div>
+<div class="flexblock">
+<span class="col1">Metalness:</span><input type="range" name="metalness" min="0" max="1" step="0.01" value="0.5"><label id="labelMetalness" class="col3">0.5</label>
+</div>
+<div class="flexblock">
+<span class="col1">Reflectance (F0):</span><input type="range" name="reflectance" min="0" max="1" step="0.01" value="0.04"><label id="labelReflectance" class="col3">0.04</label>
+</div>
+<div class="flexblock">
+<span class="col1">Irradiance:</span><input type="range" name="irradiance" min="0" max="10" step="0.01" value="5"><label id="labelIrradiance" class="col3">5</label>
+</div>
+</fieldset>
+
+<fieldset class="slidergroup">
+<legend>Positional Light</legend>
+<div class="subheader">Position</div>
+<div class="flexblock">
+<span class="col1">X:</span><input type="range" name="lightPosX" min="-10" max="10" step="0.1" value="0"><label id="labelLightPosX" class="col3">0</label>
+</div>
+<div class="flexblock">
+<span class="col1">Y:</span><input type="range" name="lightPosY" min="-10" max="10" step="0.1" value="0"><label id="labelLightPosY" class="col3">0</label>
+</div>
+<div class="flexblock">
+<span class="col1">Z:</span><input type="range" name="lightPosZ" min="-10" max="10" step="0.1" value="0"><label id="labelLightPosZ" class="col3">0</label>
+</div>
+
+<div class="subheader">Color</div>
+<div class="flexblock">
+<span class="col1">R:</span><input type="range" name="lightColorR" min="0" max="1" step="0.01" value="1"><label id="labelLightColorR" class="col3">1</label>
+</div>
+<div class="flexblock">
+<span class="col1">G:</span><input type="range" name="lightColorG" min="0" max="1" step="0.01" value="1"><label id="labelLightColorG" class="col3">1</label>
+</div>
+<div class="flexblock">
+<span class="col1">B:</span><input type="range" name="lightColorB" min="0" max="1" step="0.01" value="1"><label id="labelLightColorB" class="col3">1</label>
+</div>
+</fieldset>
+
+
+<fieldset class="slidergroup">
+<legend>Material</legend>
+<div class="subheader">Ambient Color</div>
+<div class="flexblock">
+<span class="col1">R:</span><input type="range" name="ambientR" min="0" max="1" step="0.01" value="0"><label id="labelAmbientR" class="col3">0</label>
+</div>
+<div class="flexblock">
+<span class="col1">G:</span><input type="range" name="ambientG" min="0" max="1" step="0.01" value="0"><label id="labelAmbientG" class="col3">0</label>
+</div>
+<div class="flexblock">
+<span class="col1">B:</span><input type="range" name="ambientB" min="0" max="1" step="0.01" value="0"><label id="labelAmbientB" class="col3">0</label>
+</div>
+
+<div class="subheader">Diffuse Color</div>
+<div class="flexblock">
+<span class="col1">R:</span><input type="range" name="diffuseR" min="0" max="1" step="0.01" value="0.8"><label id="labelDiffuseR" class="col3">0.8</label>
+</div>
+<div class="flexblock">
+<span class="col1">G:</span><input type="range" name="diffuseG" min="0" max="1" step="0.01" value="0.8"><label id="labelDiffuseG" class="col3">0.8</label>
+</div>
+<div class="flexblock">
+<span class="col1">B:</span><input type="range" name="diffuseB" min="0" max="1" step="0.01" value="0.8"><label id="labelDiffuseB" class="col3">0.8</label>
+</div>
+</fieldset>
+
+</form>
+
+</div> <!-- end of rightblock -->
+
+
+</div> <!-- end of contentblock -->
+</body>
+</html>
