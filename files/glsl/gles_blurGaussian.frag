@@ -34,7 +34,7 @@ void main(void)
     vec2 offset;
 
     /*
-    // compute with other kernel
+    // compute with other kernel elements
     for(int i = 1; i < MAX_KERNEL; ++i)
     {
         offset = direction * float(i) / imageDimension;
@@ -43,7 +43,7 @@ void main(void)
     }
     */
 
-    // optimize using linear texture linear filtering
+    // optimize using linear texture linear filtering (with half samples)
     float k;    // interpolated kernel
     float t;    // interpolated alpha
     for(int i = 1; i < MAX_KERNEL; i += 2)
