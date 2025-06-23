@@ -181,7 +181,6 @@ input[type="button"] {
 <script src="files/js/Light.js"></script>
 <script src="files/js/Material.js"></script>
 <script src="files/js/ObjModel.js"></script>
-<script src="files/js/Sphere.js"></script>
 <script src="files/js/webglUtils.js"></script>
 
 <script>
@@ -194,11 +193,13 @@ let vboIndex;   // index attribute
 // constants
 const ROUGHNESS = 0.5;
 const METALNESS = 0.5;
-const REFLECTANCE = 0.04;   // plastic
+const REFLECTANCE = 0.04;   // f0, plastic=0.04
 const IRRADIANCE = 2;       // total amount of light energy from all direction
 const AMBIENT = new Vector3(0, 0, 0);           // material ambient (r,g,b)
 const DIFFUSE = new Vector3(0.8, 0.8, 0.8);     // material diffuse (r,g,b)
-const LIGHT_POS = new Vector4(0, 5, 0, 1);   // (x,y,z,w)
+const SPECULAR = new Vector3(1, 1, 1);          // material specular (r,g,b)
+const SHININESS = 64;                           // material shininess
+const LIGHT_POS = new Vector4(-5, -5, -5, 1);   // (x,y,z,w)
 const LIGHT_COLOR = new Vector3(1, 1, 1);       // (r,g,b)
 const POINT_RADIUS = 20;
 const CAMERA_ANGLE = new Vector2(30, -45);      // (x, y) in degree
@@ -263,7 +264,6 @@ function initWebGL(canvasId)
     gl.farPlane = 1000;
 
     initPoint();
-    initSphere();
 
     // init pbr params
     gl.roughness = ROUGHNESS;
@@ -276,9 +276,8 @@ function initWebGL(canvasId)
     obj.read("files/models/cube_room.obj").then(obj => initVBOs(obj));
 
     // load a texture and redraw the scene after it is loaded
-    //gl.tex0 = loadTexture(gl, "files/images/envmap01_diffuse.jpg", false, frame);
-    gl.tex0 = loadTexture(gl, "files/images/envmap01.bmp", false, frame);
-    gl.tex1 = loadTexture(gl, "files/images/envmap01_diffuse.bmp", false, frame);
+    //gl.tex0 = loadTexture(gl, "files/images/envmap01_diffuse.bmp", false, frame);
+    //gl.tex0 = loadTexture(gl, "files/images/envmap01.bmp", false, frame);
 
     // init array of pointer objects
     gl.pointers = [];
@@ -362,10 +361,13 @@ function postFrame()
 function drawRoom()
 {
     // set active program
-    gl.program = gl.shaderPrograms["pbr"];
+    gl.program = gl.shaderPrograms[gl.shadingModel];
     if(!gl.program)
         return;
     gl.useProgram(gl.program);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
 
     // compute model-view transform
     gl.matrixModel.identity();
@@ -384,26 +386,25 @@ function drawRoom()
     let esLight = gl.matrixModelView.transform(gl.light.position);
     gl.uniform4fv(gl.program.uniform.lightPosition, esLight.toFloat32Array());
 
-    // pass color
+    // light color
     gl.uniform4fv(gl.program.uniform.lightColor, gl.light.getColor());
 
-    // pass attenuation uniform array
-    gl.uniform3fv(gl.program.uniform.lightAttenuations, gl.light.getAttenuations());
-
-    // pass material
+    // material
     gl.uniform4fv(gl.program.uniform.materialAmbient, gl.material.getAmbient());
     gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material.getDiffuse());
-    //gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material.getSpecular());
-    //gl.uniform1f(gl.program.uniform.materialShininess, gl.material.shininess);
-
-    // pass pbr params
-    gl.uniform1f(gl.program.uniform.roughness, gl.roughness);
-    gl.uniform1f(gl.program.uniform.metalness, gl.metalness);
-    gl.uniform1f(gl.program.uniform.reflectance, gl.reflectance);
-    gl.uniform1f(gl.program.uniform.irradiance, gl.irradiance);
-
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, gl.tex1);
+    if(gl.shadingModel == "pbr")
+    {
+        gl.uniform1f(gl.program.uniform.roughness, gl.roughness);
+        gl.uniform1f(gl.program.uniform.metalness, gl.metalness);
+        gl.uniform1f(gl.program.uniform.reflectance, gl.reflectance);
+        gl.uniform1f(gl.program.uniform.irradiance, gl.irradiance);
+    }
+    else
+    {
+        gl.uniform3fv(gl.program.uniform.lightAttenuations, gl.light.getAttenuations());
+        gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material.getSpecular());
+        gl.uniform1f(gl.program.uniform.materialShininess, gl.material.shininess);
+    }
 
     // draw model
     if(vboVertex && vboIndex)
@@ -411,39 +412,11 @@ function drawRoom()
         gl.bindBuffer(gl.ARRAY_BUFFER, vboVertex);
         gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
         gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, vboVertex.normalOffset);
-        gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 0, vboVertex.texCoordOffset);
+        //gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 0, vboVertex.texCoordOffset);
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vboIndex);
         gl.drawElements(gl.TRIANGLES, vboIndex.indexCount, gl.UNSIGNED_SHORT, 0);
     }
-
-    drawSphere();
-}
-
-
-
-///////////////////////////////////////////////////////////////////////////////
-// draw sphere
-///////////////////////////////////////////////////////////////////////////////
-function drawSphere()
-{
-    // compute matrices
-    gl.matrixModelView = gl.matrixView.clone().multiply(gl.sphere.matrix);
-    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
-    gl.matrixNormal = gl.matrixModelView.getRotationMatrix();
-    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
-    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
-    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
-
-    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([1.0,1.0,0.0,1]));
-
-    // draw sphere with interleaved mode
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.sphere.vboVertex);
-    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, gl.sphere.stride, 0);
-    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, gl.sphere.stride, 12);
-    gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, gl.sphere.stride, 24);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.sphere.vboIndex);
-    gl.drawElements(gl.TRIANGLES, gl.sphere.getIndexCount(), gl.UNSIGNED_SHORT, 0);
 }
 
 
@@ -699,8 +672,8 @@ function initGL(gl)
     // default material
     gl.material = new Material(DIFFUSE.x, DIFFUSE.y, DIFFUSE.z, 1.0); // with diffuse
     gl.material.ambient.set(AMBIENT.x, AMBIENT.y, AMBIENT.z, 1.0);
-    gl.material.specular.set(1, 1, 1, 1);
-    gl.material.shininess = 64;
+    gl.material.specular.set(SPECULAR.x, SPECULAR.y, SPECULAR.z, 1);
+    gl.material.shininess = SHININESS;
     log(gl.material);
 
     // camera
@@ -861,21 +834,47 @@ function initPoint()
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// create a VBO for a sphere
-///////////////////////////////////////////////////////////////////////////////
-function initSphere()
-{
-    gl.sphere = new Sphere(gl, 3.0, 36, 18, true);
-    gl.sphere.matrix = new Matrix4();
-    gl.sphere.matrix.translate(-7.5, -7.5, 0);
-}
-
-
-
-///////////////////////////////////////////////////////////////////////////////
 // init UI
 function initGui()
 {
+    // pbr params
+    document.getElementById("labelRoughness").innerText = ROUGHNESS;
+    document.form1.roughness.value = ROUGHNESS;
+    document.form1.roughness.oninput = function()
+    {
+        //console.log(this.value);
+        document.getElementById("labelRoughness").innerText = this.value;
+        gl.roughness = parseFloat(this.value);
+        frame();
+    };
+    document.getElementById("labelMetalness").innerText = METALNESS;
+    document.form1.metalness.value = METALNESS;
+    document.form1.metalness.oninput = function()
+    {
+        //console.log(this.value);
+        document.getElementById("labelMetalness").innerText = this.value;
+        gl.metalness = parseFloat(this.value);
+        frame();
+    };
+    document.getElementById("labelReflectance").innerText = REFLECTANCE;
+    document.form1.reflectance.value = REFLECTANCE;
+    document.form1.reflectance.oninput = function()
+    {
+        //console.log(this.value);
+        document.getElementById("labelReflectance").innerText = this.value;
+        gl.reflectance = parseFloat(this.value);
+        frame();
+    };
+    document.getElementById("labelIrradiance").innerText = IRRADIANCE;
+    document.form1.irradiance.value = IRRADIANCE;
+    document.form1.irradiance.oninput = function()
+    {
+        //console.log(this.value);
+        document.getElementById("labelIrradiance").innerText = this.value;
+        gl.irradiance = parseFloat(this.value);
+        frame();
+    };
+
     // light position
     document.getElementById("labelLightPosX").innerHTML = LIGHT_POS.x;
     document.form1.lightPosX.value = LIGHT_POS.x;
@@ -970,43 +969,13 @@ function initGui()
         updateMaterial();
     };
 
-    // pbr params
-    document.getElementById("labelRoughness").innerText = ROUGHNESS;
-    document.form1.roughness.value = ROUGHNESS;
-    document.form1.roughness.oninput = function()
-    {
-        //console.log(this.value);
-        document.getElementById("labelRoughness").innerText = this.value;
-        gl.roughness = parseFloat(this.value);
-        frame();
-    };
-    document.getElementById("labelMetalness").innerText = METALNESS;
-    document.form1.metalness.value = METALNESS;
-    document.form1.metalness.oninput = function()
-    {
-        //console.log(this.value);
-        document.getElementById("labelMetalness").innerText = this.value;
-        gl.metalness = parseFloat(this.value);
-        frame();
-    };
-    document.getElementById("labelReflectance").innerText = REFLECTANCE;
-    document.form1.reflectance.value = REFLECTANCE;
-    document.form1.reflectance.oninput = function()
-    {
-        //console.log(this.value);
-        document.getElementById("labelReflectance").innerText = this.value;
-        gl.reflectance = parseFloat(this.value);
-        frame();
-    };
-    document.getElementById("labelIrradiance").innerText = IRRADIANCE;
-    document.form1.irradiance.value = IRRADIANCE;
-    document.form1.irradiance.oninput = function()
-    {
-        //console.log(this.value);
-        document.getElementById("labelIrradiance").innerText = this.value;
-        gl.irradiance = parseFloat(this.value);
-        frame();
-    };
+    // shading model
+    let radios = document.form1.shadingmodel;
+    radios.value = "pbr";
+    radios.forEach(radio => { radio.onclick = () => setShadingModel(radio.value); });
+
+    // reset button
+    document.form1.reset.onclick = reset;
 }
 
 function translateLight()
@@ -1047,6 +1016,70 @@ function setShadingModel(shading)
         gl.shadingModel = shading;
         frame();
     }
+}
+function reset()
+{
+    // pbr params
+    gl.roughness = ROUGHNESS;
+    document.form1.roughness.value = ROUGHNESS;
+    document.getElementById("labelRoughness").innerText = ROUGHNESS;
+    gl.metalness = METALNESS;
+    document.form1.metalness.value = METALNESS;
+    document.getElementById("labelMetalness").innerText = METALNESS;
+    gl.reflectance = REFLECTANCE;
+    document.form1.reflectance.value = REFLECTANCE;
+    document.getElementById("labelReflectance").innerText = REFLECTANCE;
+    gl.irradiance = IRRADIANCE;
+    document.form1.irradiance.value = IRRADIANCE;
+    document.getElementById("labelIrradiance").innerText = IRRADIANCE;
+
+    // light
+    document.form1.lightPosX.value = LIGHT_POS.x;
+    document.getElementById("labelLightPosX").innerText = LIGHT_POS.x;
+    document.form1.lightPosY.value = LIGHT_POS.y;
+    document.getElementById("labelLightPosY").innerText = LIGHT_POS.y;
+    document.form1.lightPosZ.value = LIGHT_POS.z;
+    document.getElementById("labelLightPosZ").innerText = LIGHT_POS.z;
+    gl.light.setPosition(LIGHT_POS.x, LIGHT_POS.y, LIGHT_POS.z, 1);
+
+    document.form1.lightColorR.value = LIGHT_COLOR.x;
+    document.getElementById("labelLightColorR").innerText = LIGHT_COLOR.x;
+    document.form1.lightColorG.value = LIGHT_COLOR.y;
+    document.getElementById("labelLightColorG").innerText = LIGHT_COLOR.y;
+    document.form1.lightColorB.value = LIGHT_COLOR.z;
+    document.getElementById("labelLightColorB").innerText = LIGHT_COLOR.z;
+    gl.light.setColor(LIGHT_COLOR.x, LIGHT_COLOR.y, LIGHT_COLOR.z, 1);
+
+    // material
+    document.form1.ambientR.value = AMBIENT.x;
+    document.getElementById("labelAmbientR").innerText = AMBIENT.x;
+    document.form1.ambientG.value = AMBIENT.y;
+    document.getElementById("labelAmbientG").innerText = AMBIENT.y;
+    document.form1.ambientB.value = AMBIENT.z;
+    document.getElementById("labelAmbientB").innerText = AMBIENT.z;
+    gl.material.ambient.set(AMBIENT.x, AMBIENT.y, AMBIENT.z, 1);
+
+    document.form1.diffuseR.value = DIFFUSE.x;
+    document.getElementById("labelDiffuseR").innerText = DIFFUSE.x;
+    document.form1.diffuseG.value = DIFFUSE.y;
+    document.getElementById("labelDiffuseG").innerText = DIFFUSE.y;
+    document.form1.diffuseB.value = DIFFUSE.z;
+    document.getElementById("labelDiffuseB").innerText = DIFFUSE.z;
+    gl.material.diffuse.set(DIFFUSE.x, DIFFUSE.y, DIFFUSE.z, 1);
+
+    document.form1.shadingmodel.value = "pbr";
+
+    // reset camera
+    gl.camera.angle = new Vector2(deg2rad(CAMERA_ANGLE.x), deg2rad(CAMERA_ANGLE.y));
+    gl.camera.target.set(0, 0, 0);
+    gl.camera.distance = CAMERA_Z;
+    gl.matrixView.identity();
+    gl.matrixView.rotateY(gl.camera.angle.y);
+    gl.matrixView.rotateX(gl.camera.angle.x);
+    gl.matrixView.translate(0, 0, -gl.camera.distance);
+    gl.matrixView.translate(-gl.camera.target.x, -gl.camera.target.y, -gl.camera.target.z);
+
+    frame();
 }
 
 </script>
@@ -1139,6 +1172,14 @@ WebGL PBR
 </div>
 </fieldset>
 
+<fieldset class="shadinggroup">
+<legend>Shading Model</legend>
+<input type="radio" id="shadingmodel1" name="shadingmodel" value="pbr" checked><label for="shadingmodel1">PBR</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<input type="radio" id="shadingmodel2" name="shadingmodel" value="blinn"><label for="shadingmodel2">Blinn-Phong</label>
+</fieldset>
+<br>
+
+<input type="button" name="reset" value="Reset">
 </form>
 
 </div> <!-- end of rightblock -->
