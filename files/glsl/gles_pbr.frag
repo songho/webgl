@@ -32,7 +32,7 @@
 #endif
 
 // constants
-const float PI_INV = 0.318309886;
+const float PI_INV = 0.318309886;       // 1/PI
 
 // uniforms
 uniform vec4 lightColor;
@@ -55,7 +55,7 @@ varying vec3 normalVec;                 // normal vector in eye space
 // fresnel reflectance approx. for specular
 // F(v,h) = f0 + (1 - f0) * (1 - v.h)^5
 // f0: specular reflectance at normal incidence (water=2%, plastic=4%, iron=60%, aluminum=90%)
-// f90: specular reflectance at grazing angle(90 degree), normally 100% 
+// f90: specular reflectance at grazing angle(90 degree), normally 100%
 ///////////////////////////////////////////////////////////////////////////////
 vec3 F_Schlick(float dotVH, vec3 f0)
 {
@@ -69,7 +69,7 @@ float F_Schlick90(float dotVH, float f0, float f90)
 
 ///////////////////////////////////////////////////////////////////////////////
 // normal distribution function for specular
-// D(n,h) = a^2 / (PI * ((n.h)^2 * (a^2 - 1) + 1)^2)
+// D(h) = a^2 / (PI * ((n.h)^2 * (a^2 - 1) + 1)^2)
 // a = roughness * roughness
 ///////////////////////////////////////////////////////////////////////////////
 float D_GGX(float dotNH, float roughness)
@@ -83,36 +83,36 @@ float D_GGX(float dotNH, float roughness)
 
 ///////////////////////////////////////////////////////////////////////////////
 // geometry function of shadowing/masking approx. for specular
-// G(l,v) = G1(l) * G1(v)
+// G(l,v) = G1(n.l) * G1(n.v)
 // G1(l) = n.l / (n.l * (1 - k) + k)
 // G1(v) = n.v / (n.v * (1 - k) + k)
-// k = (roughness * roughness) / 2
+// where k = (roughness * roughness) / 2
 ///////////////////////////////////////////////////////////////////////////////
-float G1_GGX_Schlick(float dotNV, float roughness)
-{
-    float k = (roughness * roughness) / 2.0;
-    //return max(dotNV, 0.001) / (dotNV * (1.0 - k) + k);
-    return dotNV / (dotNV * (1.0 - k) + k); // 1 means no interference
-}
 float G_Smith(float dotNL, float dotNV, float roughness)
 {
-  return G1_GGX_Schlick(dotNL, roughness) * G1_GGX_Schlick(dotNV, roughness);
+    float k = (roughness * roughness) * 0.5;
+    float G_nl = dotNL / (dotNL * (1.0 - k) + k);   // for light direction (shadow)
+    float G_nv = dotNV / (dotNV * (1.0 - k) + k);   // for view direction (masking)
+    return G_nl * G_nv;
 }
 
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// fresnel reflectance for diffuse
+// BRDF for diffuse, fd
+// fd = 1/PI * F(n,l,f90) * F(n,v,f90)
+// f90 = 0.5 + 2 * a * (v.h)^2
+// a = roughness^2
 ///////////////////////////////////////////////////////////////////////////////
-float Fd_Burley(float dotNV, float dotNL, float dotVH, float roughness)
+float fd_Burley(float dotNL, float dotNV, float dotVH, float roughness)
 {
     float a = roughness * roughness;
     float f90 = 0.5 + 2.0 * a * dotVH * dotVH;
-    float fl = F_Schlick90(dotNL, 1.0, f90);  // light scatter
-    float fv = F_Schlick90(dotNV, 1.0, f90);  // view scatter
-    return fl * fv;
+    float fl = 1.0 + (f90 - 1.0) * pow(1.0 - dotNL, 5.0);   // light scatter
+    float fv = 1.0 + (f90 - 1.0) * pow(1.0 - dotNV, 5.0);   // view scatter
+    return PI_INV * fl * fv;
 }
-float Fd_Lambert()
+float fd_Lambert()
 {
     return PI_INV;
 }
@@ -120,8 +120,8 @@ float Fd_Lambert()
 
 ///////////////////////////////////////////////////////////////////////////////
 // microfacet BRDF = fs(v,l) + fd(v,l)
-// fs(v,l) = (F(v,h) * D(h) * G(v,l)) / (4 * n.l * n.v)
-// fd(v,l) = sigma/pi * F(n,l) * F(n,v)
+// fs(v,l) = (F(v,h) * D(h) * G(l,v)) / (4 * n.l * n.v)
+// fd(v,l) = baseColor/pi * F(n,l,f90) * F(n,v,f90)
 // F: Fresnel Reflectance
 // D: Normal Distribution function
 // G: Geometry function
@@ -146,11 +146,11 @@ vec3 BRDF(vec3 l, vec3 v, vec3 n,
     float G = G_Smith(dotNL, dotNV, roughness); // geometry function
     vec3 fs = (F * D * G) / (4.0 *  max(dotNL, 0.001) * max(dotNV, 0.001));
 
-    // diffuse part 
+    // diffuse part
     vec3 fd = materialDiffuse;
     fd *= vec3(1.0) - F;    // conserve energy (fs+fd is less than 1)
-    fd *= PI_INV; // with lambert diffise
-    //fd *= Fd_Burley(dotNV, dotNL, dotVH, roughness); // with burley diffuse
+    fd *= PI_INV; // with lambert diffuse
+    //fd *= fd_Burley(dotNL, dotNV, dotVH, roughness); // with burley diffuse
     fd *= (1.0 - metalness);
 
     return fd + fs; // diffuse + specular
