@@ -5,7 +5,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2025-05-22
-// UPDATED: 2025-06-05
+// UPDATED: 2025-06-29
 ///////////////////////////////////////////////////////////////////////////////
 
 
@@ -126,6 +126,80 @@ function resizeHalfKernel(kernel, newSize)
     }
 
     return newKernel;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// generate 1D average (box) kernel
+// It returns Float32Array
+///////////////////////////////////////////////////////////////////////////////
+function generateAverageKernel(kernelSize)
+{
+    let k = new Float32Array(kernelSize);
+    k.fill(1);
+    // normalize kernel
+    for(let i = 1; i < kernelSize; ++i)
+    {
+        k[i] /= kernelSize;
+    }
+    return k;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// generate 3x3 Sobel kernel for edge detection (row-major)
+// horizontal direction = 0
+// vertical direction = 1
+// It returns Float32Array
+///////////////////////////////////////////////////////////////////////////////
+function generateSobelKernel(direction=0)
+{
+    let k = new Float32Array(9);
+    if(direction == 0)
+    {
+        k[0] = -1;  k[1] =  0;  k[2] =  1;
+        k[3] = -2;  k[4] =  0;  k[5] =  2;
+        k[0] = -1;  k[1] =  0;  k[2] =  1;
+    }
+    else
+    {
+        k[0] = -1;  k[1] = -2;  k[2] = -1;
+        k[3] =  0;  k[4] =  0;  k[5] =  0;
+        k[0] =  1;  k[1] =  2;  k[2] =  1;
+    }
+    return k;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// generate 3x3 Laplacian (2nd-order derivative) kernel for edge detection
+// It returns Float32Array
+///////////////////////////////////////////////////////////////////////////////
+function generateLaplacianKernel()
+{
+    let k = new Float32Array(9);
+    k[0] =  0;  k[1] = -1;  k[2] =  0;
+    k[3] = -1;  k[4] =  4;  k[5] = -1;
+    k[0] =  0;  k[1] = -1;  k[2] =  0;
+    return k;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// generate 3x3 sharpenng kernel baed on LAplacian
+// It returns Float32Array
+///////////////////////////////////////////////////////////////////////////////
+function generateSharpeningKernel()
+{
+    let k = new Float32Array(9);
+    k[0] =  0;  k[1] = -1;  k[2] =  0;
+    k[3] = -1;  k[4] =  5;  k[5] = -1;
+    k[0] =  0;  k[1] = -1;  k[2] =  0;
+    return k;
 }
 
 
