@@ -134,12 +134,12 @@ function resizeHalfKernel(kernel, newSize)
 // generate 1D average (box) kernel
 // It returns Float32Array
 ///////////////////////////////////////////////////////////////////////////////
-function generateAverageKernel(kernelSize)
+function generateAverageKernel(kernelSize=9)
 {
     let k = new Float32Array(kernelSize);
     k.fill(1);
     // normalize kernel
-    for(let i = 1; i < kernelSize; ++i)
+    for(let i = 0; i < kernelSize; ++i)
     {
         k[i] /= kernelSize;
     }
@@ -150,8 +150,8 @@ function generateAverageKernel(kernelSize)
 
 ///////////////////////////////////////////////////////////////////////////////
 // generate 3x3 Sobel kernel for edge detection (row-major)
-// horizontal direction = 0
-// vertical direction = 1
+// direction: 0 = horizontal derivative
+//            1 = vertical derivative 
 // It returns Float32Array
 ///////////////////////////////////////////////////////////////////////////////
 function generateSobelKernel(direction=0)
@@ -161,13 +161,39 @@ function generateSobelKernel(direction=0)
     {
         k[0] = -1;  k[1] =  0;  k[2] =  1;
         k[3] = -2;  k[4] =  0;  k[5] =  2;
-        k[0] = -1;  k[1] =  0;  k[2] =  1;
+        k[6] = -1;  k[7] =  0;  k[8] =  1;
     }
     else
     {
         k[0] = -1;  k[1] = -2;  k[2] = -1;
         k[3] =  0;  k[4] =  0;  k[5] =  0;
-        k[0] =  1;  k[1] =  2;  k[2] =  1;
+        k[6] =  1;  k[7] =  2;  k[8] =  1;
+    }
+    return k;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// generate 3x3 emboss kernel based on Sobel (row-major)
+// direction: 0 = top-left to bottom-right
+//            1 = top-left to bottom-left 
+// It returns Float32Array
+///////////////////////////////////////////////////////////////////////////////
+function generateEmbossKernel(direction=0)
+{
+    let k = new Float32Array(9);
+    if(direction == 0)
+    {
+        k[0] = -2;  k[1] = -1;  k[2] =  0;
+        k[3] = -1;  k[4] =  1;  k[5] =  1;
+        k[6] =  0;  k[7] =  1;  k[8] =  2;
+    }
+    else if(direction == 1)
+    {
+        k[0] =  0;  k[1] = -1;  k[2] = -2;
+        k[3] =  1;  k[4] =  1;  k[5] = -1;
+        k[6] =  2;  k[7] =  1;  k[8] =  0;
     }
     return k;
 }
@@ -183,14 +209,14 @@ function generateLaplacianKernel()
     let k = new Float32Array(9);
     k[0] =  0;  k[1] = -1;  k[2] =  0;
     k[3] = -1;  k[4] =  4;  k[5] = -1;
-    k[0] =  0;  k[1] = -1;  k[2] =  0;
+    k[6] =  0;  k[7] = -1;  k[8] =  0;
     return k;
 }
 
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// generate 3x3 sharpenng kernel baed on LAplacian
+// generate 3x3 sharpening kernel baed on Laplacian
 // It returns Float32Array
 ///////////////////////////////////////////////////////////////////////////////
 function generateSharpeningKernel()
@@ -198,7 +224,7 @@ function generateSharpeningKernel()
     let k = new Float32Array(9);
     k[0] =  0;  k[1] = -1;  k[2] =  0;
     k[3] = -1;  k[4] =  5;  k[5] = -1;
-    k[0] =  0;  k[1] = -1;  k[2] =  0;
+    k[6] =  0;  k[7] = -1;  k[8] =  0;
     return k;
 }
 
