@@ -4,6 +4,8 @@
 // Wavefront 3D object (.obj and .mtl) loader
 // NOTE: call clearArrays() after copying data to opengl
 //
+// dependencies: Vectors.js
+//
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2011-12-19
 // UPDATED: 2025-05-02
