@@ -6,7 +6,7 @@ testing blur with Gaussian kernel
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2017-08-02
-UPDATED: 2025-06-03
+UPDATED: 2025-09-23
 ===============================================================================
 -->
 
@@ -195,6 +195,8 @@ function initWebGL(canvasId)
         gl.fbo1.init(gl.tex0.width, gl.tex0.height);
         gl.fbo2.init(gl.tex0.width, gl.tex0.height);
         gl.texQuad.set(0, gl.tex0.width, 0, gl.tex0.height);
+
+        frame();
     });
 
     // create rectangle
@@ -347,7 +349,7 @@ function postFrame()
 ///////////////////////////////////////////////////////////////////////////////
 function blurImage(texId, fbo, direction)
 {
-    gl.program = gl.shaderPrograms["gaussian"];
+    gl.program = gl.shaderPrograms["convolve1d"];
     if(!gl.program) return;
     gl.useProgram(gl.program);
 
@@ -841,7 +843,7 @@ Convolution Direction:
 </div>
 <br>
 <div class="kernelinfo">
-<strong>Kernel:</strong>
+<strong>Half Kernel:</strong>
 <div id="kernelvalue">
 </div>
 </div>
