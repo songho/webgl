@@ -349,7 +349,7 @@ function postFrame()
 ///////////////////////////////////////////////////////////////////////////////
 function blurImage(texId, fbo, direction)
 {
-    gl.program = gl.shaderPrograms["convolve1d"];
+    gl.program = gl.shaderPrograms["gaussian"];
     if(!gl.program) return;
     gl.useProgram(gl.program);
 
