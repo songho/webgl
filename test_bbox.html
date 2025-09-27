@@ -846,7 +846,7 @@ function initGLSL(gl)
     gl.shaderPrograms = {}; // associative array
 
     // load floor shader
-    createShaderProgram(gl, "files/glsl/gles_phong.vert", "files/glsl/gles_phong.frag").then(program =>
+    createShaderProgram(gl, "files/glsl/gles3_phong.vert", "files/glsl/gles3_phong.frag").then(program =>
     {
         gl.useProgram(program);
 
@@ -863,7 +863,7 @@ function initGLSL(gl)
     });
 
     // load sprite shader
-    createShaderProgram(gl, GLSL_PATH+"gles_sprite.vert", GLSL_PATH+"gles_sprite.frag").then(program =>
+    createShaderProgram(gl, GLSL_PATH+"gles3_sprite.vert", GLSL_PATH+"gles3_sprite.frag").then(program =>
     {
         gl.useProgram(program);
 
@@ -876,7 +876,7 @@ function initGLSL(gl)
     });
 
     // load flat shader
-    createShaderProgram(gl, GLSL_PATH+"gles_flat.vert", GLSL_PATH+"gles_flat.frag").then(program =>
+    createShaderProgram(gl, GLSL_PATH+"gles3_flat.vert", GLSL_PATH+"gles3_flat.frag").then(program =>
     {
         gl.useProgram(program);
 
@@ -888,7 +888,7 @@ function initGLSL(gl)
     });
 
     // load point shader
-    createShaderProgram(gl, GLSL_PATH+"gles_point.vert", GLSL_PATH+"gles_point.frag").then(program =>
+    createShaderProgram(gl, GLSL_PATH+"gles3_point.vert", GLSL_PATH+"gles3_point.frag").then(program =>
     {
         gl.useProgram(program);
 

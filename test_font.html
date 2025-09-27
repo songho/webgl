@@ -698,7 +698,7 @@ function initGLSL(gl)
     gl.shaderPrograms = {}; // associative array
 
     // load sprite shader
-    createShaderProgram(gl, "files/glsl/gles_sprite.vert", "files/glsl/gles_sprite.frag").then(program =>
+    createShaderProgram(gl, "files/glsl/gles3_sprite.vert", "files/glsl/gles3_sprite.frag").then(program =>
     {
         gl.useProgram(program);
 
@@ -711,7 +711,7 @@ function initGLSL(gl)
     });
 
     // load flat shader
-    createShaderProgram(gl, "files/glsl/gles_flat.vert", "files/glsl/gles_flat.frag").then(program =>
+    createShaderProgram(gl, "files/glsl/gles3_flat.vert", "files/glsl/gles3_flat.frag").then(program =>
     {
         gl.useProgram(program);
 
