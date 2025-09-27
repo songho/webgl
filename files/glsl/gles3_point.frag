@@ -1,11 +1,13 @@
+#version 300 es
+
 ///////////////////////////////////////////////////////////////////////////////
-// gles_sprite.frag
+// gles3_point.frag
 // ================
 // Shader for 2D/3D points
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2013-10-25
-// UPDATED: 2013-10-25
+// UPDATED: 2025-09-26
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -16,6 +18,9 @@
 
 // uniforms
 uniform vec4 color;           // point color
+
+// output
+out vec4 fragColor;
 
 void main(void)
 {
@@ -29,8 +34,8 @@ void main(void)
     //if(dist.x > 0.5 || dist.y > 0.5)
     //    discard;
 
-    // Hermite interpolation of edge1 < x < edge2 to 0 to 1
+    // Hermite interpolation of edge1 < dist < edge2 to 0 to 1
     float alpha = 1.0 - smoothstep(0.45, 0.55, distance);
 
-    gl_FragColor = alpha * vec4(color.r, color.g, color.b, color.a);
+    fragColor = alpha * vec4(color.r, color.g, color.b, color.a);
 }
