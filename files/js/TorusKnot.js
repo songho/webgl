@@ -20,7 +20,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2023-03-15
-// UPDATED: 2025-07-29
+// UPDATED: 2025-10-11
 ///////////////////////////////////////////////////////////////////////////////
 
 let TorusKnot = function(gl, majorRadius=1, minorRadius=0.5, tubeRadius=0.2, p=2, q=3, sectors=90, sides=18, smooth=true)
@@ -38,6 +38,7 @@ let TorusKnot = function(gl, majorRadius=1, minorRadius=0.5, tubeRadius=0.2, p=2
     this.sideCount = 18;
     this.smooth = true;
     this.path = [];
+    this.pathDirections = [];
     this.contour = [];
     this.contourNormal = [];
     this.firstContour = [];
@@ -255,6 +256,31 @@ TorusKnot.prototype =
 
         // last point meets to the first point
         this.path.push(this.path[0].clone());
+
+        // remember path direction vectors
+        this.pathDirections.length = 0;
+
+        let dir1, dir2;
+        for(let i = 0; i <= this.sectorCount; ++i)
+        {
+            if(i == 0)
+            {
+                dir1 = this.path[this.path.length-1].clone().subtract(this.path[this.path.length-2]);
+                dir2 = this.path[1].clone().subtract(this.path[0]);
+            }
+            else if(i == this.sectorCount)
+            {
+                dir1 = this.path[i].clone().subtract(this.path[i-1]);
+                dir2 = this.path[1].clone().subtract(this.path[0]);
+            }
+            else
+            {
+                dir1 = this.path[i].clone().subtract(this.path[i-1]);
+                dir2 = this.path[i+1].clone().subtract(this.path[i]);
+            }
+            this.pathDirections.push(dir1.add(dir2).normalize());
+        }
+
     },
 
     ///////////////////////////////////////////////////////////////////////////
@@ -329,37 +355,6 @@ TorusKnot.prototype =
             this.contour[i] = c;
             this.contourNormal[i] = c.clone().subtract(p).normalize();
         }
-
-        // align the last contour to the first contour
-        if(toIndex == this.sectorCount)
-            this.alignLastContour();
-    },
-
-    alignLastContour: function()
-    {
-        let c0 = this.contour[0];
-        let minDist = this.tubeRadius * 2;
-        let offset = 0;
-        for(let i = 0; i < this.sideCount; ++i)
-        {
-            let c = this.firstContour[i];
-            let dist = c0.distance(c);
-            if(dist < minDist)
-            {
-                minDist = dist;
-                offset = i;
-            }
-        }
-
-        // snap vertices to the closest one
-        for(let i = 0; i <= this.sideCount; ++i)
-        {
-            let index = (offset + i) % (this.sideCount);
-            let c = this.firstContour[index];
-            let p = this.path[0];
-            this.contour[i] = c.clone();
-            this.contourNormal[i] = c.clone().subtract(p).normalize();
-        }
     },
 
     ///////////////////////////////////////////////////////////////////////////
@@ -403,6 +398,8 @@ TorusKnot.prototype =
                 jj += 2;
             }
         }
+        // rotate contours, so first/last contours are aligned
+        this.alignContoursSmooth();
 
         // indices
         //  k1---k2
@@ -470,6 +467,8 @@ TorusKnot.prototype =
                 tmpVertices.push(vertex);
             }
         }
+        // rotate contours, so first/last contours are aligned
+        tmpVertices = this.alignContoursFlat(tmpVertices);
 
         let i, j, n, v1, v2, v3, v4, vi1, vi2, index, ii, jj, kk;
         ii = jj = kk = index = 0;
@@ -526,6 +525,148 @@ TorusKnot.prototype =
         // generate interleaved vertex array as well
         this.buildInterleavedVertices();
         this.buildVbos();
+    },
+
+    ///////////////////////////////////////////////////////////////////////////
+    // align contour vertices, so first and last contours are aligned
+    ///////////////////////////////////////////////////////////////////////////
+    alignContoursSmooth: function()
+    {
+        // compute angle between first contour and last contour
+        let lastIndex = this.sectorCount * (this.sideCount + 1) * 3;
+        let f1 = new Vector3(this.vertices[0], this.vertices[1], this.vertices[2]).clone().subtract(this.path[0]).normalize();
+        let f2 = new Vector3(this.vertices[lastIndex], this.vertices[lastIndex+1], this.vertices[lastIndex+2]).clone().subtract(this.path[0]).normalize();
+        let d = this.pathDirections[0];
+        let dot = f1.dot(f2);
+        let cross = Vector3.cross(f1, f2);
+        let det = d.dot(cross);
+        let a = Math.atan2(-det, -dot) + Math.PI; // angle range: 0 ~ 2PI
+
+        // if angle is small no need to rotate
+        if(a > -0.01 && a < 0.01)
+        {
+            // make sure the last vertices are same as the first
+            for(let i = 0, ii = lastIndex; i <= (this.sideCount*3); i+=3, ii += 3)
+            {
+                this.vertices[ii]   = this.vertices[i];
+                this.vertices[ii+1] = this.vertices[i+1];
+                this.vertices[ii+2] = this.vertices[i+2];
+                this.normals[ii]   = this.normals[i];
+                this.normals[ii+1] = this.normals[i+1];
+                this.normals[ii+2] = this.normals[i+2];
+            }
+            return;
+        }
+
+        // find delta angle per each path
+        let deltaAngle = 0;
+        if(a <= Math.PI)
+            deltaAngle = -a / this.sectorCount;
+        else
+            deltaAngle = (2 * Math.PI - a) / this.sectorCount;
+
+        a = 0;
+        for(let i = 1; i < this.sectorCount; ++i)
+        {
+            d = this.pathDirections[i];
+            let center = this.path[i];
+            a += deltaAngle;
+            let c = Math.cos(a);
+            let s = Math.sin(a);
+
+            for(let j = 0, k = (this.sideCount + 1) * i * 3; j <= this.sideCount; ++j, k += 3)
+            {
+                let v = new Vector3(this.vertices[k], this.vertices[k+1], this.vertices[k+2]);
+                let n = new Vector3(this.normals[k], this.normals[k+1], this.normals[k+2]);
+                // rotate with rodrigues formula
+                v.subtract(center);
+                v = d.clone().scale(1-c).scale(v.dot(d)).add(v.clone().scale(c)).add(Vector3.cross(d, v).scale(s));
+                v.add(center);
+                this.vertices[k]   = v.x;
+                this.vertices[k+1] = v.y;
+                this.vertices[k+2] = v.z;
+                n = d.clone().scale(1-c).scale(n.dot(d)).add(n.clone().scale(c)).add(Vector3.cross(d, n).scale(s));
+                this.normals[k]   = n.x;
+                this.normals[k+1] = n.y;
+                this.normals[k+2] = n.z;
+            }
+        }
+
+        // snap the last contour with last contour
+        for(let i = 0, ii = lastIndex; i <= (this.sideCount*3); i += 3 , ii += 3)
+        {
+            this.vertices[ii]   = this.vertices[i];
+            this.vertices[ii+1] = this.vertices[i+1];
+            this.vertices[ii+2] = this.vertices[i+2];
+            this.normals[ii]   = this.normals[i];
+            this.normals[ii+1] = this.normals[i+1];
+            this.normals[ii+2] = this.normals[i+2];
+        }
+    },
+
+    // input param is a tmp vertices of Vector3
+    alignContoursFlat: function(vertices)
+    {
+        // compute angle between first contour and last contour
+        let lastIndex = this.sectorCount * (this.sideCount + 1);
+        let f1 = new Vector3(vertices[0].x, vertices[0].y, vertices[0].z).subtract(this.path[0]).normalize();
+        let f2 = new Vector3(vertices[lastIndex].x, vertices[lastIndex].y, vertices[lastIndex].z).subtract(this.path[0]).normalize();
+        let n = this.pathDirections[0];
+        let dot = f1.dot(f2);
+        let cross = Vector3.cross(f1, f2);
+        let det = n.dot(cross);
+        let a = Math.atan2(-det, -dot) + Math.PI; // angle range: 0 ~ 2PI
+
+        // if angle is small no need to rotate
+        if(a > -0.01 && a < 0.01)
+        {
+            // make sure the last vertices are same as the first
+            for(let i = 0; i <= this.sideCount; ++i)
+            {
+                vertices[lastIndex + i].x = vertices[i].x;
+                vertices[lastIndex + i].y = vertices[i].y;
+                vertices[lastIndex + i].z = vertices[i].z;
+            }
+            return vertices;
+        }
+
+        // find delta angle per each path
+        let deltaAngle = 0;
+        if(a <= Math.PI)
+            deltaAngle = -a / this.sectorCount;
+        else
+            deltaAngle = (2 * Math.PI - a) / this.sectorCount;
+
+        a = 0;
+        for(let i = 1, ii = this.sideCount+1; i < this.sectorCount; ++i, ii += (this.sideCount+1))
+        {
+            n = this.pathDirections[i];
+            let center = this.path[i];
+            a += deltaAngle;
+            let c = Math.cos(a);
+            let s = Math.sin(a);
+            for(let j = 0; j <= this.sideCount; ++j)
+            {
+                let p = new Vector3(vertices[ii + j].x, vertices[ii + j].y, vertices[ii + j].z);
+                // rotate with rodrigues formula
+                p.subtract(center);
+                p = n.clone().scale(1 - c).scale(p.dot(n)).add(p.clone().scale(c)).add(Vector3.cross(n, p).scale(s));
+                p.add(center);
+                vertices[ii + j].x = p.x;
+                vertices[ii + j].y = p.y;
+                vertices[ii + j].z = p.z;
+            }
+        }
+
+        // snap the last contour with last contour
+        for(let i = 0; i <= this.sideCount; ++i)
+        {
+            vertices[lastIndex + i].x = vertices[i].x;
+            vertices[lastIndex + i].y = vertices[i].y;
+            vertices[lastIndex + i].z = vertices[i].z;
+        }
+        // return tmp vertices
+        return vertices;
     },
 
     ///////////////////////////////////////////////////////////////////////////
