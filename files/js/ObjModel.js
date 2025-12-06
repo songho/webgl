@@ -8,7 +8,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2011-12-19
-// UPDATED: 2025-05-02
+// UPDATED: 2025-12-06
 //
 // Copyright (c) 2011. Song Ho Ahn
 ///////////////////////////////////////////////////////////////////////////////
@@ -133,7 +133,7 @@ ObjModel.prototype =
                     continue;
 
                 // start tokenizing
-                tokens = line.split(" ");
+                tokens = line.split(/\s+/);
                 if(tokens.length <= 0)  // skip blank line
                     continue;
 
