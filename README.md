@@ -18,9 +18,10 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 15. [Render To Texture](https://www.songho.ca/webgl/webgl_rtt.html): Render to Texture using FrameBuffer class 
 16. [Gaussian Blur](https://www.songho.ca/webgl/webgl_blur.html): Convolution with seperable Gaussian kernel 
 17. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render an OBJ file using ObjModel class
-18. [Camera](https://www.songho.ca/webgl/webgl_camera.html): Orbital camera interface using pointer events
-19. [Mouse Picking](https://www.songho.ca/webgl/webgl_pick.html): Mouse picking using selection buffer
-20. [Drawing Edges](https://www.songho.ca/webgl/webgl_edge.html): Find and generate edge lines from a 3D geometry using Edge class
+18. [Loading STL](https://www.songho.ca/opengl/gl_stl.html): Parse and render a STL model using StlModel class
+19. [Camera](https://www.songho.ca/webgl/webgl_camera.html): Orbital camera interface using pointer events
+20. [Mouse Picking](https://www.songho.ca/webgl/webgl_pick.html): Mouse picking using selection buffer
+21. [Drawing Edges](https://www.songho.ca/webgl/webgl_edge.html): Find and generate edge lines from a 3D geometry using Edge class
 
 
 
