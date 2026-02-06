@@ -2,16 +2,16 @@
 <html>
 
 <!-- ==========================================================================
-test for loading OBJ model with texture
+test for loading STL model
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2011-12-16
-UPDATED: 2026-02-06
+UPDATED: 2026-02-05
 ===============================================================================
 -->
 
 <head>
-<title>Loading OBJ</title>
+<title>STL Model</title>
 <meta name="generator" content="editplus" />
 <meta name="author" content="Song Ho Ahn" />
 <meta name="keywords" content="" />
@@ -172,7 +172,7 @@ ul.listbox li.activelist {
 <script type="text/javascript" src="files/js/Quaternion.js"></script>
 <script type="text/javascript" src="files/js/Light.js"></script>
 <script type="text/javascript" src="files/js/Material.js"></script>
-<script type="text/javascript" src="files/js/ObjModel.js"></script>
+<script type="text/javascript" src="files/js/StlModel.js"></script>
 <script type="text/javascript" src="files/js/webglUtils.js"></script>
 
 
@@ -247,20 +247,16 @@ function initWebGL(canvasId)
     gl.nearPlane = 1;
     gl.farPlane = 1000;
 
-    gl.obj = new ObjModel(gl);
-    gl.obj.read("files/models/torus_hard.obj").then(obj =>
+    gl.stl = new StlModel(gl);
+    gl.stl.read("files/models/cube_bin.stl").then(stl =>
     {
-        log(obj);
-        initVBO(obj);
-        gl.obj.name = "torus_hard.obj";
-        displayObjInfo(obj);
-        obj.clearArrays();
+        log(stl);
+        initVBO(stl);
+        gl.stl.name = "cube_bin.stl";
+        displayStlInfo(stl);
+        stl.clearArrays();
         frame();
     }).catch(msg => { log(msg); });
-
-    // load a texture
-    gl.tex0 = loadTexture(gl, "files/images/grid512.png", false, tex => frame());
-    gl.textureUsed = true;
 
     // init array of pointer objects
     gl.pointers = [];
@@ -325,27 +321,16 @@ function frame()
 {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    // set active program
-    if(gl.textureUsed)
-    {
-        gl.program = gl.shaderPrograms["phongTex"];
-        if(!gl.program) return;
-        gl.useProgram(gl.program);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
-    }
-    else
-    {
-        gl.program = gl.shaderPrograms["phong"];
-        if(!gl.program) return;
-        gl.useProgram(gl.program);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, null);
-    }
+    gl.program = gl.shaderPrograms["phong"];
+    if(!gl.program) return;
+    gl.useProgram(gl.program);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
 
     // compute model-view transform
     gl.matrixModel.identity();
-    gl.matrixModel.translate(-gl.obj.center.x, -gl.obj.center.y, -gl.obj.center.z);
+    gl.matrixModel.translate(-gl.stl.center.x, -gl.stl.center.y, -gl.stl.center.z);
+    gl.matrixModel.rotateX(-90 / 180 * Math.PI);    // Z-axis up
     gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
     gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
 
@@ -379,12 +364,8 @@ function frame()
         gl.bindBuffer(gl.ARRAY_BUFFER, gl.vbo);
         gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
         gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, gl.vbo.normalOffset);
-        if(gl.textureUsed)
-        {
-            gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 0, gl.vbo.texCoordOffset);
-        }
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.ibo);
-        gl.drawElements(gl.TRIANGLES, gl.ibo.indexCount, gl.obj.indexType, 0);
+        gl.drawElements(gl.TRIANGLES, gl.ibo.indexCount, gl.stl.indexType, 0);
     }
 }
 
@@ -426,7 +407,7 @@ function handleWheel(e)
     // negative deltaY = wheel up
     if(e.deltaY != 0)
     {
-        let deltaDistance = e.deltaY * gl.obj.radius * 0.01;
+        let deltaDistance = e.deltaY * gl.stl.radius * 0.01;
         gl.camera.distance += deltaDistance;
         if(gl.camera.distance < gl.nearPlane)
             gl.camera.distance = gl.nearPlane;
@@ -526,7 +507,7 @@ function handlePointerMove(pe)
         if(gl.pointers.distance > 0)
             deltaDistance = dist - gl.pointers.distance;
         gl.pointers.distance = dist;     // remember
-        gl.camera.distance -= deltaDistance * gl.obj.radius * SCALE_ZOOM;
+        gl.camera.distance -= deltaDistance * gl.stl.radius * SCALE_ZOOM;
 
         // update camera
         gl.matrixView.identity();
@@ -547,7 +528,7 @@ function handlePointerMove(pe)
         if(pe.pointerType == "mouse" && gl.pointers[0].button == 2)
         {
             let delta = gl.pointers[0].delta.normalize();
-            delta = delta.scale(gl.obj.radius * SCALE_SHIFT);
+            delta = delta.scale(gl.stl.radius * SCALE_SHIFT);
 
             let l = new Vector3(-gl.matrixView.m[0], -gl.matrixView.m[4], -gl.matrixView.m[8]);
             let u = new Vector3(gl.matrixView.m[1], gl.matrixView.m[5], gl.matrixView.m[9]);
@@ -656,62 +637,49 @@ function initGLSL(gl)
     // load shaders
     gl.shaderPrograms = {}; // associative array
 
-    // load phong shader with 1 texture
-    createShaderProgram(gl, "files/glsl/gles_phongTex.vert", "files/glsl/gles_phongTex.frag").then(program =>
-    {
-        gl.useProgram(program);
-
-        // setup uniforms
-        gl.uniform1i(program.uniform.map0, 0);
-
-        gl.shaderPrograms["phongTex"] = program;
-        frame();
-    });
-
+    // load phong shader
     createShaderProgram(gl, "files/glsl/gles_phong.vert", "files/glsl/gles_phong.frag").then(program =>
     {
         gl.shaderPrograms["phong"] = program;
         frame();
     });
 
-    gl.shadingModel = "phongTex";   // default shading
+    gl.shadingModel = "phong";   // default shading
 }
 
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// create vbo for OBJ model
+// create vbo for STL model
 ///////////////////////////////////////////////////////////////////////////////
-function initVBO(obj)
+function initVBO(stl)
 {
-    gl.obj.volume = computeVolume(obj.vertices, obj.indices);
-    gl.obj.area = computeArea(obj.vertices, obj.indices);
-    log("\nVolume: " + gl.obj.volume);
-    log("  Area: " + gl.obj.area);
+    gl.stl.volume = computeVolume(stl.vertices, stl.indices);
+    gl.stl.area = computeArea(stl.vertices, stl.indices);
+    log("\nVolume: " + gl.stl.volume);
+    log("  Area: " + gl.stl.area);
 
     // re-normalize normals
-    obj.normalize();
-    log("Re-normalized the surface normals of OBJ.");
+    stl.normalize();
+    log("Re-normalized the surface normals of STL.");
 
     if(!gl.vbo)
         gl.vbo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.vbo);
-    let dataSize = obj.vertices.byteLength + obj.normals.byteLength + obj.texCoords.byteLength; // total # of bytes
+    let dataSize = stl.vertices.byteLength + stl.normals.byteLength; // total # of bytes
     gl.bufferData(gl.ARRAY_BUFFER, dataSize, gl.STATIC_DRAW);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, obj.vertices);
-    gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength, obj.normals);
-    gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength + obj.normals.byteLength, obj.texCoords);
-    gl.vbo.normalOffset = obj.vertices.byteLength;
-    gl.vbo.texCoordOffset = obj.vertices.byteLength + obj.normals.byteLength;
-
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, stl.vertices);
+    gl.bufferSubData(gl.ARRAY_BUFFER, stl.vertices.byteLength, stl.normals);
+    gl.vbo.normalOffset = stl.vertices.byteLength;
+ 
     if(!gl.ibo)
         gl.ibo = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.ibo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, obj.indices, gl.STATIC_DRAW);
-    gl.ibo.indexCount = obj.indices.length;
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, stl.indices, gl.STATIC_DRAW);
+    gl.ibo.indexCount = stl.indices.length;
 
     // reset camera
-    gl.camera.distance = obj.radius * 2.5;
+    gl.camera.distance = stl.radius * 2.5;
     gl.camera.angle.set(0, 0);
     gl.camera.target.set(0, 0, 0);
     gl.matrixView.identity();
@@ -726,48 +694,40 @@ function initVBO(obj)
 ///////////////////////////////////////////////////////////////////////////////
 function initDom()
 {
-    let fileObj = document.getElementById("fileObj");
-    fileObj.value = "";
-    fileObj.addEventListener("change", () =>
+    let fileStl = document.getElementById("fileStl");
+    fileStl.value = "";
+    fileStl.addEventListener("change", () =>
     {
-        let file = fileObj.files[0];
+        let file = fileStl.files[0];
         let fileUrl = window.URL.createObjectURL(file);
-        gl.obj.name = file.name;
-        loadObjFile(fileUrl);
-
+        gl.stl.name = file.name;
+        loadStlFile(fileUrl);
+        
         // clear selection
         let stlList = document.querySelectorAll("ul.listbox > li");
         stlList.forEach(e => e.classList.remove("activelist"));
     });
 
-    let checkTexture = document.getElementById("checkTexture");
-    checkTexture.checked = gl.textureUsed;
-    checkTexture.addEventListener("change", () =>
+    let stlList = document.querySelectorAll("ul.listbox > li");
+    stlList.forEach(li =>
     {
-        gl.textureUsed = checkTexture.checked;
-        frame();
-    });
-
-    let objList = document.querySelectorAll("ul.listbox > li");
-    objList.forEach(li =>
-    {
-        objList.forEach(e => e.classList.remove("activelist"));
+        stlList.forEach(e => e.classList.remove("activelist"));
         li.addEventListener("click", () =>
         {
             // remove prev active
-            objList.forEach(e => e.classList.remove("activelist"));
+            stlList.forEach(e => e.classList.remove("activelist"));
             // add active on selected list
             li.classList.add("activelist");
-            gl.obj.name = li.id
-            loadObjFile("files/models/" + li.id);
+            gl.stl.name = li.id
+            loadStlFile("files/models/" + li.id);
         });
     });
 
     let buttonReset = document.getElementById("reset");
     buttonReset.addEventListener("click", () =>
     {
-        loadObjFile("files/models/torus_hard.obj");
-        objList.forEach(e => e.classList.remove("activelist"));
+        loadStlFile("files/models/cube_bin.stl");
+        stlList.forEach(e => e.classList.remove("activelist"));
     });
 
 }
@@ -775,57 +735,44 @@ function initDom()
 
 
 ///////////////////////////////////////////////////////////////////////////////
-function loadObjFile(file)
+function loadStlFile(file)
 {
-    gl.obj.read(file).then(obj  =>
+    gl.stl.read(file).then(stl  =>
     {
-        log(obj);
+        log(stl);
 
-        initVBO(obj);
-        displayObjInfo(obj);
-
-        let checkTexture = document.getElementById("checkTexture");
-        if(obj.texCoordCount == 0)
-        {
-            checkTexture.disabled = true;
-            gl.textureUsed = false;
-        }
-        else
-        {
-            checkTexture.disabled = false;
-            if(checkTexture.checked)
-                gl.textureUsed = true;
-        }
+        initVBO(stl);
+        displayStlInfo(stl);
 
         frame();
         // clear arrays after copy data to webgl
-        obj.clearArrays();
+        stl.clearArrays();
     });
 }
 
-function displayObjInfo(obj)
+function displayStlInfo(stl)
 {
     let textName = document.getElementById("textName");
     let textTriangles = document.getElementById("textTriangles");
     let textVertices = document.getElementById("textVertices");
     let textNormals = document.getElementById("textNormals");
-    let textTexCoords = document.getElementById("textTexCoords");
     let textIndices = document.getElementById("textIndices");
+    let textType = document.getElementById("textType");
     let textRadius = document.getElementById("textRadius");
     let textCenter = document.getElementById("textCenter");
-    //let textArea = document.getElementById("textArea");
-    //let textVolume = document.getElementById("textVolume");
+    let textArea = document.getElementById("textArea");
+    let textVolume = document.getElementById("textVolume");
 
-    textName.innerHTML = gl.obj.name;
-    textTriangles.innerHTML = obj.triangleCount + " tris";
-    textIndices.innerHTML = obj.indexCount;
-    textVertices.innerHTML = obj.vertexCount;
-    textNormals.innerHTML = obj.normalCount;
-    textTexCoords.innerHTML = obj.texCoordCount;
-    textCenter.innerHTML = "(" + obj.center.x.toFixed(3) + ", " + obj.center.y.toFixed(3) + ", " + obj.center.z.toFixed(3) + ")";
-    textRadius.innerHTML = obj.radius.toFixed(3);
-    //textVolume.innerHTML = gl.obj.volume.toFixed(3);
-    //textArea.innerHTML = gl.obj.area.toFixed(3);
+    textName.innerHTML = gl.stl.name;
+    textTriangles.innerHTML = stl.triangleCount + " tris";
+    textIndices.innerHTML = stl.indexCount;
+    textVertices.innerHTML = stl.vertexCount;
+    textNormals.innerHTML = stl.normalCount;
+    textType.innerHTML = stl.fileType;
+    textCenter.innerHTML = "(" + stl.center.x.toFixed(3) + ", " + stl.center.y.toFixed(3) + ", " + stl.center.z.toFixed(3) + ")";
+    textRadius.innerHTML = stl.radius.toFixed(3);
+    textVolume.innerHTML = gl.stl.volume.toFixed(3);
+    textArea.innerHTML = gl.stl.area.toFixed(3);
 }
 
 </script>
@@ -844,45 +791,40 @@ function displayObjInfo(obj)
 
 <div class="rightblock">
 <h2>
-WebGL Loading OBJ
+WebGL STL Model
 </h2>
 
-<label for="fileObj">Choose OBJ File: </label>
-<input type="file" id="fileObj" name="fileObj" value="" accept=".obj">
+<label for="fileStl">Choose STL File: </label>
+<input type="file" id="fileStl" name="fileStl" value="" accept=".stl">
 <br>
-<br>
-<label><input style="margin-bottom:10px;" type="checkbox" id="checkTexture">Show Default Texture</label>
 
 <h3>
-OBJ: <span id="textName"></span>
+STL: <span id="textName"></span>
 </h3>
 <div class="gridbox">
 <div class="gridcol1"># of Triangles:</div><div id="textTriangles" class="gridcol2"></div>
 <div class="gridcol1"># of Vertices:</div><div id="textVertices" class="gridcol2"></div>
 <div class="gridcol1"># of Normals:</div><div id="textNormals" class="gridcol2"></div>
-<div class="gridcol1"># of TexCoords:</div><div id="textTexCoords" class="gridcol2"></div>
 <div class="gridcol1"># of Indices:</div><div id="textIndices" class="gridcol2"></div>
+<div class="gridcol1">File Type:</div><div id="textType" class="gridcol2"></div>
 <div class="gridcol1">Center:</div><div id="textCenter" class="gridcol2"></div>
 <div class="gridcol1">Radius:</div><div id="textRadius" class="gridcol2"></div>
-<!--
 <div class="gridcol1">Volume:</div><div id="textVolume" class="gridcol2"></div>
 <div class="gridcol1">Area:</div><div id="textArea" class="gridcol2"></div>
--->
 </div>
-<input type="button" name="reset" id="reset" value="Reset OBJ">
+<input type="button" name="reset" id="reset" value="Reset STL">
 
 <hr>
 
 <h3>
-Sample OBJs
+Sample STLs
 </h3>
 <ul class="listbox">
-<li id="debugger_5k.obj">debugger_5k.obj</li>
-<li id="Beethoven_20k.obj">Beethoven_20k.obj</li>
-<li id="dragon.obj">dragon.obj</li>
-<li id="teapot.obj">teapot.obj</li>
-<li id="sphere.obj">sphere.obj</li>
-<li id="cube_quads.obj">cube_quads.obj</li>
+<li id="debugger_5k.stl">debugger_5k.stl</li>
+<li id="duck_binary.stl">duck_binary.stl</li>
+<li id="teapot_solid.stl">teapot_solid.stl</li>
+<li id="sphere_ascii.stl">sphere_ascii.stl</li>
+<li id="cube_ascii.stl">cube_ascii.stl</li>
 </ul>
 
 
