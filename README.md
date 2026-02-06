@@ -9,7 +9,7 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 6. [Drawing Cube](https://www.songho.ca/webgl/webgl_cube.html): Draw a rotating cube with a texture map and vertex colors
 7. [Drawing Sphere](https://www.songho.ca/webgl/webgl_sphere.html): Draw a sphere with a texture map
 8. [Drawing Torus](https://www.songho.ca/opengl/gl_torus.html#webgl_torus): Draw a torus
-9. [Drawing Sphere](https://www.songho.ca/opengl/gl_torus.html#webgl_knot): Draw a torus knot
+9. [Drawing TorusKnot](https://www.songho.ca/opengl/gl_torus.html#webgl_knot): Draw a torus knot
 10. [Drawing Bitmap Font](https://www.songho.ca/webgl/webgl_font.html): Draw a bitmap font in 3D
 11. [Loading Texture](https://www.songho.ca/webgl/webgl_texture.html): Loading a diffuse texture
 12. [Loading Normal Map](https://www.songho.ca/webgl/webgl_normalmap.html): Loading and drawing a normal map 
