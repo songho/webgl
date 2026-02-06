@@ -8,17 +8,19 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 5. [Lighting](https://www.songho.ca/webgl/webgl_light.html): Ambient, Diffuse, Specular & Attenuation
 6. [Drawing Cube](https://www.songho.ca/webgl/webgl_cube.html): Draw a rotating cube with a texture map and vertex colors
 7. [Drawing Sphere](https://www.songho.ca/webgl/webgl_sphere.html): Draw a sphere with a texture map
-8. [Drawing Bitmap Font](https://www.songho.ca/webgl/webgl_font.html): Draw a bitmap font in 3D
-9. [Loading Texture](https://www.songho.ca/webgl/webgl_texture.html): Loading a diffuse texture
-10. [Loading Normal Map](https://www.songho.ca/webgl/webgl_normalmap.html): Loading and drawing a normal map 
-11. [Drawing Sprite](https://www.songho.ca/webgl/webgl_sprite.html): Drawing sprites using Sprite class 
-12. [Drawing 2D Image](https://www.songho.ca/webgl/webgl_image.html): Drawing 2D image using Quad class 
-13. [Render To Texture](https://www.songho.ca/webgl/webgl_rtt.html): Render to Texture using FrameBuffer class 
-14. [Gaussian Blur](https://www.songho.ca/webgl/webgl_blur.html): Convolution with seperable Gaussian kernel 
-15. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render an OBJ file using ObjModel class
-16. [Camera](https://www.songho.ca/webgl/webgl_camera.html): Orbital camera interface using pointer events
-17. [Mouse Picking](https://www.songho.ca/webgl/webgl_pick.html): Mouse picking using selection buffer
-18. [Drawing Edges](https://www.songho.ca/webgl/webgl_edge.html): Find and generate edge lines from a 3D geometry using Edge class
+8. [Drawing Torus](https://www.songho.ca/opengl/gl_torus.html#webgl_torus): Draw a torus
+9. [Drawing Sphere](https://www.songho.ca/opengl/gl_torus.html#webgl_knot): Draw a torus knot
+10. [Drawing Bitmap Font](https://www.songho.ca/webgl/webgl_font.html): Draw a bitmap font in 3D
+11. [Loading Texture](https://www.songho.ca/webgl/webgl_texture.html): Loading a diffuse texture
+12. [Loading Normal Map](https://www.songho.ca/webgl/webgl_normalmap.html): Loading and drawing a normal map 
+13. [Drawing Sprite](https://www.songho.ca/webgl/webgl_sprite.html): Drawing sprites using Sprite class 
+14. [Drawing 2D Image](https://www.songho.ca/webgl/webgl_image.html): Drawing 2D image using Quad class 
+15. [Render To Texture](https://www.songho.ca/webgl/webgl_rtt.html): Render to Texture using FrameBuffer class 
+16. [Gaussian Blur](https://www.songho.ca/webgl/webgl_blur.html): Convolution with seperable Gaussian kernel 
+17. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render an OBJ file using ObjModel class
+18. [Camera](https://www.songho.ca/webgl/webgl_camera.html): Orbital camera interface using pointer events
+19. [Mouse Picking](https://www.songho.ca/webgl/webgl_pick.html): Mouse picking using selection buffer
+20. [Drawing Edges](https://www.songho.ca/webgl/webgl_edge.html): Find and generate edge lines from a 3D geometry using Edge class
 
 
 
