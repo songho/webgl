@@ -9,7 +9,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2011-03-01
-// UPDATED: 2025-05-14
+// UPDATED: 2026-04-24
 ///////////////////////////////////////////////////////////////////////////////
 
 // default 1x1 texture data
@@ -1045,13 +1045,12 @@ function generateTangents(vertices, normals, texCoords, indices)
         let d1 = new Vector2(texCoords[ti2] - texCoords[ti1], texCoords[ti2+1] - texCoords[ti1+1]);
         let d2 = new Vector2(texCoords[ti3] - texCoords[ti1], texCoords[ti3+1] - texCoords[ti1+1]);
 
-        let id = 1 / (d1.x * d2.y - d1.y * d2.x);   // inverse determinent
+        let id = 1 / (d1.x * d2.y - d2.x * d1.y);   // inverse determinent
 
         let t = new Vector3();
         t.x = id * (d2.y * e1.x - d1.y * e2.x);
         t.y = id * (d2.y * e1.y - d1.y * e2.y);
         t.z = id * (d2.y * e1.z - d1.y * e2.z);
-        t.normalize(t);
 
         // make perpendicular to vertex normal: T - (T.N) * N
         let n1 = new Vector3(normals[vi1], normals[vi1+1], normals[vi1+2]);
@@ -1068,4 +1067,27 @@ function generateTangents(vertices, normals, texCoords, indices)
     }
 
     return tangents;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// generate bitangent vectors of  tangent space by cross product of N x T
+///////////////////////////////////////////////////////////////////////////////
+function generateBitangents(tangents, normals)
+{
+    let count = tangents.length;
+    let bitangents = new Float32Array(count);
+
+    for(let i = 0; i < count; i += 3)
+    {
+        let t = new Vector3(tangents[i], tangents[i+1], tangents[i+2]);
+        let n = new Vector3(normals[i], normals[i+1], normals[i+2]);
+        let b = Vector3.cross(n, t);
+
+        bitangents[i]   = b.x;
+        bitangents[i+1] = b.y;
+        bitangents[i+2] = b.z;
+    }
+    return bitangents;
 }
