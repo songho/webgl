@@ -26,8 +26,7 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 23. [Camera](https://www.songho.ca/webgl/webgl_camera.html): Orbital camera interface using pointer events
 24. [Mouse Picking](https://www.songho.ca/webgl/webgl_pick.html): Mouse picking using selection buffer
 25. [Drawing Edges](https://www.songho.ca/webgl/webgl_edge.html): Find and generate edge lines from a 3D geometry using Edge class
-
-
+26. [Clipping](https://www.songho.ca/webgl/test_clip.html): Clipping with a user-defined plane equation
 
 ## License
 All source code in this repository are under the MIT License. Please see the [LICENSE](LICENSE) for detail.
