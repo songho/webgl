@@ -1,22 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 
 <!-- ==========================================================================
-test for Sphere class
+test for clipping
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
-CREATED: 2011-12-16
-UPDATED: 2024-07-19
+CREATED: 2012-01-30
+UPDATED: 2026-05-10
 ===============================================================================
 -->
 
 <head>
-<title>Sphere</title>
-<meta charset="utf-8" />
-<meta name="generator" content="editplus" />
-<meta name="author" content="Song Ho Ahn" />
-<meta name="keywords" content="" />
-<meta name="description" content="" />
+<title>Test Clipping</title>
+<meta charset="utf-8">
+<meta name="author" content="Song Ho Ahn">
+<meta name="keywords" content="">
+<meta name="description" content="">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <!-- CSS -->
@@ -26,6 +25,9 @@ body {
     padding:0;
     font-family:arial,helvetica,sans-serif;
     box-sizing:border-box;
+}
+h3 {
+    margin-bottom:5px;
 }
 p {
     margin:0 0 1em 0;
@@ -42,11 +44,11 @@ p {
 }
 .mainblock {
     position:relative;
-    flex:1 0 300px; /* min 300px */
+    flex:1 1 300px;
     border:1px solid #ddd;
 }
 .rightblock {
-    flex:0 0 250px; /* fixed 300px */
+    flex:0 0 300px;
     height:100%;
     overflow:auto;
     margin-left:10px;
@@ -57,49 +59,14 @@ p {
     height:100%;
     touch-action:none; /* prevent browser handle pointer events */
 }
-#info {
-    position:absolute;
-    top:0;
-    right:0;
-    margin-top:5px;
-    margin-right:5px;
-    line-height:110%;
+#planeEq {
+    font-family:"Times New Roman", Times, serif;
+    font-size:18px;
 }
-
-/* GUI */
-input[type="button"], button {
-    width:100%;
+input[type=range] {
+    vertical-align:middle;
 }
-.slider {
-    -webkit-appearance:none;
-    height:5px;
-    background-color:#e0e0e0;
-    margin:10px 0 20px 0;
-}
-.slider::-webkit-slider-thumb {
-    -webkit-appearance:none;
-    background-color:#07f;
-    width:20px;
-    height:20px;
-    border-radius:50%;
-    cursor:pointer;
-}
-.slider::-moz-range-thumb {
-    background-color:#07f;
-    width:20px;
-    height:20px;
-    border-radius:50%;
-    cursor:pointer;
-}
-.slider::-webkit-slider-thumb:hover, .slider::-webkit-slider-thumb:active {
-    background-color:#05f;
-}
-.slider::-moz-range-thumb:hover, .slider::-moz-range-thumb:active {
-    background-color:#05f;
-}
-
 </style>
-
 
 
 <!-- JavaScript -->
@@ -107,25 +74,24 @@ input[type="button"], button {
 <!-- WebGL libs -->
 <script src="files/js/Vectors.js"></script>
 <script src="files/js/Matrices.js"></script>
+<script src="files/js/Plane.js"></script>
+<script src="files/js/Sphere.js"></script>
 <script src="files/js/Quaternion.js"></script>
 <script src="files/js/Light.js"></script>
 <script src="files/js/Material.js"></script>
 <script src="files/js/Timer.js"></script>
 <script src="files/js/FrameRate.js"></script>
+<script src="files/js/MouseState.js"></script>
 <script src="files/js/AnimationMode.js"></script>
 <script src="files/js/OrbitCamera.js"></script>
-<script src="files/js/ShaderManager.js"></script>
-<script src="files/js/Sphere.js"></script>
 <script src="files/js/webglUtils.js"></script>
 
 <!-- shader -->
-<script id="vert-simple" type="x-shader/x-vertex">
-// per-vertex lighting with a directional light source
-
+<script id="vert-clip" type="x-shader/x-vertex">
 // vertex attributes
 attribute vec3 vertexPosition;
 attribute vec3 vertexNormal;
-attribute vec2 vertexTexCoord0;
+attribute vec2 vertexTexCoord;
 
 // uniforms
 uniform mat4 matrixNormal;
@@ -140,6 +106,7 @@ uniform vec4 materialAmbient;           // material ambient color
 uniform vec4 materialDiffuse;           // material diffuse color
 uniform vec4 materialSpecular;          // material specular color
 uniform float materialShininess;        // material specular exponent
+uniform vec4 clipCoeff;                 // (A,B,C,D) of the clip plane
 
 // varying variables
 varying vec4 ambient;
@@ -148,10 +115,18 @@ varying vec4 normalVec;
 varying vec3 lightVec;
 varying vec3 halfVec;
 varying float lightDistance;
-varying vec2 texCoord0;
+varying vec4 eyePosition;
+varying vec4 clipVec;
+varying vec2 texCoord;
 
 void main(void)
 {
+    // pass the vertex in eye space
+    //eyePosition = matrixModelView * vec4(vertexPosition, 1);
+    eyePosition = matrixNormal * vec4(vertexPosition, 1);
+    clipVec = matrixNormal * clipCoeff;
+    texCoord = vertexTexCoord;
+
     // transform vertex position to clip space
     gl_Position = matrixModelViewProjection * vec4(vertexPosition, 1);
 
@@ -188,15 +163,12 @@ void main(void)
 
     // compute half vector
     halfVec = normalize(lightVec + vec3(0,0,1));
-
-    // pass texture coord
-    texCoord0 = vertexTexCoord0;
 }
 </script>
 
 
 
-<script id="frag-simple" type="x-shader/x-fragment">
+<script id="frag-clip" type="x-shader/x-fragment">
 #ifdef GL_FRAGMENT_PRECISION_HIGH
     precision highp float;
 #else
@@ -209,8 +181,9 @@ uniform vec4 lightColor;
 uniform vec3 lightAttenuations;         // constant, linear, quadratic attanuations
 uniform vec4 materialSpecular;          // material specular color
 uniform float materialShininess;        // material specular exponent
-uniform bool textureEnabled;
-uniform sampler2D map0;
+uniform sampler2D map0;                 // texture map #1
+uniform vec4 clipCoeff;                 // (A,B,C,D) of the clip plane
+uniform int clipMode;
 
 // varying variables
 varying vec4 ambient;
@@ -219,16 +192,27 @@ varying vec4 normalVec;
 varying vec3 lightVec;
 varying vec3 halfVec;
 varying float lightDistance;
-varying vec2 texCoord0;
+varying vec4 eyePosition;
+varying vec4 clipVec;
+varying vec2 texCoord;
 
 void main(void)
 {
+    // clipping
+    float dotClip = 0.0;
+    if(clipMode == 0)
+        dotClip = dot(eyePosition, clipCoeff);
+    else if(clipMode == 1)
+        dotClip = dot(eyePosition, clipVec);    // use transformed clip coeff in eye space
+
+    if(dotClip < 0.0)
+        discard;
+
+
     if(!lightEnabled)
     {
-        if(textureEnabled)
-            gl_FragColor = texture2D(map0, texCoord0) * diffuse;
-        else
-            gl_FragColor = diffuse;
+        //@@gl_FragColor = texture2D(map0, texCoord) * diffuse;
+        gl_FragColor = diffuse;
         return;
     }
 
@@ -239,49 +223,63 @@ void main(void)
 
     // compute attenuations for positional light
     float dotNL = max(dot(normal, light), 0.0);
-    float dotNH = max(dot(normal, halfv), 0.0);
-    //float dotNH = dot(normal, halfv);
+    float dotNH = dot(normal, halfv);
+
+    // compute attenuation factor: 1 / (k0 + k1 * d + k2 * (d*d))
+    float attFactor = 1.0;
+    if(lightDistance > 0.0)
+        attFactor = 1.0 / (lightAttenuations[0] +
+                           lightAttenuations[1] * lightDistance +
+                           lightAttenuations[2] * lightDistance * lightDistance);
 
     // start with ambient
     vec3 color = ambient.xyz;
 
-    // add diffuse
-    color += dotNL * diffuse.xyz;
-
-    // apply texturing before specular
-    if(textureEnabled)
+    if(attFactor > 0.0)
     {
-        vec4 texel = texture2D(map0, texCoord0);
+        // add diffuse
+        color += dotNL * diffuse.xyz;
+
+        // apply texturing before specular
+        vec4 texel = texture2D(map0, texCoord);
         color *= texel.rgb;     // modulate
+
+        // add specular
+        if(dotNH > 0.0)
+            color += pow(dotNH, materialShininess) * materialSpecular.xyz * lightColor.xyz;
+
+        // add attenuation
+        if(attFactor < 1.0)
+            color *= attFactor;
+
+        //@@gl_FragColor = vec4(color.rgb, diffuse.a * texel.a);
+        gl_FragColor = vec4(color, diffuse.a);  // keep alpha as original material has
     }
-
-    // add specular
-    color += pow(dotNH, materialShininess) * materialSpecular.xyz * lightColor.xyz;
-
-    // add attenuation
-    //color *= attFactor;
-
-    //@@gl_FragColor = vec4(color.rgb, diffuse.a * texel.a);
-    gl_FragColor = vec4(color, diffuse.a);  // keep alpha as original material has
 }
 </script>
 
 
-<script type="text/javascript">
 
-// global vars
+
+<script>
 let gl = null;
-
-// constants
-const CAMERA_DIST = 5;
+const CAMERA_DIST = 8;
 const ANIM_DURATION = 500;
 const IMAGE_PATH = "files/images/";
+const GLSL_PATH = "files/glsl/";
+const COEFF_A = 1;
+const COEFF_B = 0;
+const COEFF_C = 0;
+const COEFF_D = 0.5;
+const SPHERE_RADIUS = 2;
+const PLANE_WIDTH = 3;
+
 
 
 ///////////////////////////////////////////////////////////////////////////////
 // main entry point
 ///////////////////////////////////////////////////////////////////////////////
-document.addEventListener("DOMContentLoaded", () =>
+document.addEventListener("DOMContentLoaded", function()
 {
     let success = initWebGL("webglView");
     if(!success)
@@ -335,26 +333,29 @@ function initWebGL(canvasId)
 
     // init gl and glsl
     initGL(gl);
-    initGLSL(gl);
+    initGLSL();
     log("WebGL is initialized.");
 
-    gl.nearPlane = 0.1;
-    gl.farPlane = 100;
+    initVBOs();
 
-    // default rendering modes
-    gl.wireframeEnabled = false;
-    gl.textureEnabled = false;
+    // plane equation
+    gl.plane = new Plane(COEFF_A, COEFF_B, COEFF_C, COEFF_D);
+    gl.plane.normalize();
+    gl.clipMode = 0;
+    gl.planeVisible = true;
 
-    // init array of pointer objects
-    gl.pointers = [];
-
-    // create a sphere, param: (gl, radius=1, sectors=36, stacks=18, smooth=false)
-    gl.sphere = new Sphere(gl, 1.0, 36, 18, false);
-    printSphere();
+    // create sphere, param: (gl, radius, sectors, stacks, smooth=true)
+    gl.sphere = new Sphere(gl, SPHERE_RADIUS, 72, 36, true);
     log(gl.sphere);
 
     // load default texture
     gl.tex0 = loadTexture(gl, IMAGE_PATH + "grid512.png", true);
+
+    // rotation angles (x,y,z)
+    gl.angle = 0;
+
+    // init array of pointer objects
+    gl.pointers = [];
 
     // register event handlers
     window.addEventListener("resize",  handleResize, false);
@@ -389,56 +390,62 @@ function initWebGL(canvasId)
 }
 
 
+
 ///////////////////////////////////////////////////////////////////////////////
 // draw a single frame
 ///////////////////////////////////////////////////////////////////////////////
 function frame()
 {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.disable(gl.CULL_FACE);
+
+    gl.program = gl.shaderPrograms["clip"];
+    gl.useProgram(gl.program);
 
     // view transform
     gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
 
     // model transform
+    //gl.angle += gl.frameTime * 0.0005;
     gl.matrixModel.identity();
-    gl.matrixModel.rotateX(-Math.PI / 2);
+    //gl.matrixModel.rotateX(-Math.PI / 2);
 
     // compute modelview transform
     gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
     gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
 
     // compute normal transform
-    gl.matrixNormal = gl.matrixModelView.clone().invert().transpose();
+    gl.matrixNormal = gl.matrixModelView.clone().setTranslation(0,0,0);
     gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
 
     // compute modelviewprojection transform
     gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
     gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
 
-    if(gl.textureEnabled)
-    {
-        gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
-        gl.uniform1i(gl.program.uniform.textureEnabled, 1);
-    }
-    else
-    {
-        gl.bindTexture(gl.TEXTURE_2D, null);
-        gl.uniform1i(gl.program.uniform.textureEnabled, 0);
-    }
+    // setup uniform for coefficients of a clip plane
+    let coeff = new Float32Array([gl.plane.normal.x, gl.plane.normal.y, gl.plane.normal.z, gl.plane.d]);
+    gl.uniform4fv(gl.program.uniform.clipCoeff, coeff);
+    gl.uniform1i(gl.program.uniform.clipMode, gl.clipMode);
+
+    gl.uniform4fv(gl.program.uniform.materialAmbient, gl.material.getAmbient());
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material.getDiffuse());
+    gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material.getSpecular());
+    gl.uniform1f(gl.program.uniform.materialShininess, gl.material.shininess);
+
+    // bind texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
 
     // draw sphere with interleaved mode
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.sphere.vboVertex);
     gl.vertexAttribPointer(gl.program.attribute.position, 3, gl.FLOAT, false, gl.sphere.stride, 0);
     gl.vertexAttribPointer(gl.program.attribute.normal, 3, gl.FLOAT, false, gl.sphere.stride, 12);
-    gl.vertexAttribPointer(gl.program.attribute.texCoord0, 2, gl.FLOAT, false, gl.sphere.stride, 24);
+    gl.vertexAttribPointer(gl.program.attribute.texCoord, 2, gl.FLOAT, false, gl.sphere.stride, 24);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.sphere.vboIndex);
-    gl.uniform4fv(gl.program.uniform.lightColor, gl.light.getColor());
     gl.drawElements(gl.TRIANGLES, gl.sphere.getIndexCount(), gl.UNSIGNED_SHORT, 0);
-    if(gl.wireframeEnabled)
-    {
-        gl.uniform4fv(gl.program.uniform.lightColor, new Float32Array([0, 0, 0, 1]));
-        gl.drawElements(gl.LINE_STRIP, gl.sphere.getIndexCount(), gl.UNSIGNED_SHORT, 0);
-    }
+
+    if(gl.planeVisible)
+        drawPlane();
 }
 
 
@@ -448,6 +455,60 @@ function frame()
 ///////////////////////////////////////////////////////////////////////////////
 function postFrame()
 {
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function drawPlane()
+{
+    gl.program = gl.shaderPrograms["phong"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    let n = gl.plane.normal.clone();
+    let t = n.clone().normalize().scale(gl.plane.getDistance());
+    let matrix = new Matrix4();
+    matrix.lookAt(n.x, n.y, n.z);
+    matrix.translate(t.x, t.y, t.z);
+
+    if(gl.clipMode == 0)
+    {
+        let matrixView = new Matrix4();
+        matrixView.setTranslation(0, 0, -gl.camera.distance);
+        gl.matrixModelView = matrixView.clone().multiply(matrix);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+    }
+    else
+    {
+        gl.matrixModelView = gl.matrixView.clone().multiply(matrix);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+    }
+
+    gl.matrixNormal = gl.matrixModelView.clone();
+    gl.matrixNormal.setTranslation(0,0,0); // remove tranlsation part
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    // pass light
+    gl.uniform4fv(gl.program.uniform.lightColor, gl.light.getColor());
+    gl.uniform3fv(gl.program.uniform.lightAttenuations, gl.light.getAttenuations());
+    gl.uniform4fv(gl.program.uniform.lightPosition, gl.light.position.toFloat32Array());
+
+    // pass material
+    gl.uniform4fv(gl.program.uniform.materialAmbient, gl.materialPlane.getAmbient());
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.materialPlane.getDiffuse());
+    gl.uniform4fv(gl.program.uniform.materialSpecular, gl.materialPlane.getSpecular());
+    gl.uniform1f(gl.program.uniform.materialShininess, gl.materialPlane.shininess);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboPlane);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, gl.vboPlane.normalOffset);
+    //gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord, 2, gl.FLOAT, false, 0, gl.vboPlane.texCoordOffset);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
 }
 
 
@@ -489,8 +550,7 @@ function handleWheel(e)
     const ZOOM_SCALE = 0.1;
     if(e.deltaY != 0)
     {
-        let deltaDistance = 0;
-        //console.log(e.deltaY);
+        let deltaDistance;
         if(e.deltaY > 0)    // wheel down
             deltaDistance = ZOOM_SCALE;
         else                // wheel up
@@ -587,13 +647,14 @@ function handlePointerMove(pe)
         let dir = d1.add(d2).normalize();   // sum vector of 2 delta vectors
         let v = new Vector2(gl.pointers[1].x - gl.pointers[0].x, gl.pointers[1].y - gl.pointers[0].y);
         let dist = v.length();              // distance of 2 vectors
-
+        /*
         if(d1.dot(d2) > 0.95)
         {
             // shift camera if same direction
             gl.camera.shift(dir.scale(SCALE_SHIFT));
         }
         else
+        */
         {
             // zoom camera if opposite direction
             let deltaDistance = 0;
@@ -650,20 +711,22 @@ function copyPointer(pe, offset={x:0,y:0})
 ///////////////////////////////////////////////////////////////////////////////
 // init OpenGL
 ///////////////////////////////////////////////////////////////////////////////
-function initGL(gl)
+function initGL(width, height)
 {
-    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clearColor(1.0, 1.0, 1.0, 0.0);
     gl.clearDepth(1.0);
     gl.enable(gl.DEPTH_TEST);   // enable depth test
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.CULL_FACE);    // enable culling backface
-    gl.cullFace(gl.BACK);
+    //gl.cullFace(gl.BACK);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     // default light
-    gl.light = new Light(0, 0, 1, 1);
+    gl.light = new Light(0, 0, 0, 1);
     //gl.light.position.normalize(); //@@ fix normalize()
-    gl.light.color.set(1.0, 1.0, 1.0, 1.0);        // light color
-    gl.light.attenuations.set(1, 0.5, 0); // attenuations (constant, linear, quad)
+    gl.light.color.set(1.0, 1.0, 1.0, 1.0);     // light color
+    gl.light.attenuations.set(1, 0, 0);         // attenuations (constant, linear, quad)
     log("    Light Position: " + gl.light.position);
     log("       Light Color: " + gl.light.color);
     log("Light Attenuations: " + gl.light.attenuations);
@@ -672,13 +735,24 @@ function initGL(gl)
     // default material
     gl.material = new Material(0.7, 0.7, 0.7, 1.0); // with default diffuse
     gl.material.ambient.set(0.2, 0.2, 0.2, 1.0);
-    gl.material.specular.set(0.2, 0.2, 0.2, 1);
+    gl.material.specular.set(1.0, 1.0, 1.0, 1.0);
     gl.material.shininess = 128;
     log("  Material Ambient: " + gl.material.ambient);
     log("  Material Diffuse: " + gl.material.diffuse);
     log(" Material Specualr: " + gl.material.specular);
     log("Material Shininess: " + gl.material.shininess);
     log();
+
+    // material for plane
+    gl.materialPlane = new Material(0.5, 0.6, 0.5, 1.0); // with diffuse
+    gl.materialPlane.ambient.set(0.4, 0.5, 0.4, 1.0);
+    gl.materialPlane.specular.set(0.1, 0.2, 0.1, 1);
+    gl.materialPlane.shininess = 32;
+
+    gl.screenWidth = width;
+    gl.screenHeight = height;
+    gl.viewport(0, 0, width, height);
+    log("Screen Dimension: " + width + " x " + height);
 
     // init matrices
     handleResize();
@@ -693,11 +767,24 @@ function initGL(gl)
 ///////////////////////////////////////////////////////////////////////////////
 // init GLSL (shaders and programs)
 ///////////////////////////////////////////////////////////////////////////////
-function initGLSL(gl)
+function initGLSL()
 {
+    initVertexAttribArrays(gl);
+
+    // load shaders
+    gl.shaderPrograms = {}; // associative array
+
+    // load phong shader
+    createShaderProgram(gl, GLSL_PATH+"gles_phong.vert", GLSL_PATH+"gles_phong.frag").then(program =>
+    {
+        gl.useProgram(program);
+        gl.shaderPrograms["phong"] = program;
+   });
+
+
     // create shader objects
-    let vertexShader = loadShaderById(gl, "vert-simple");
-    let fragmentShader = loadShaderById(gl, "frag-simple");
+    let vertexShader = loadShaderById(gl, "vert-clip");
+    let fragmentShader = loadShaderById(gl, "frag-clip");
     if(!vertexShader || !fragmentShader)
         return;
 
@@ -717,15 +804,16 @@ function initGLSL(gl)
     }
 
     gl.useProgram(gl.program);
+    gl.shaderPrograms["clip"] = gl.program;
 
     // setup attributes
     gl.program.attribute = {};
     gl.program.attribute.position = gl.getAttribLocation(gl.program, "vertexPosition");
     gl.program.attribute.normal = gl.getAttribLocation(gl.program, "vertexNormal");
-    gl.program.attribute.texCoord0 = gl.getAttribLocation(gl.program, "vertexTexCoord0");
+    gl.program.attribute.texCoord = gl.getAttribLocation(gl.program, "vertexTexCoord");
     gl.enableVertexAttribArray(gl.program.attribute.position);
     gl.enableVertexAttribArray(gl.program.attribute.normal);
-    gl.enableVertexAttribArray(gl.program.attribute.texCoord0);
+    gl.enableVertexAttribArray(gl.program.attribute.texCoord);
 
     // setup uniforms
     gl.program.uniform = {};
@@ -733,6 +821,8 @@ function initGLSL(gl)
     gl.program.uniform.matrixView = gl.getUniformLocation(gl.program, "matrixView");
     gl.program.uniform.matrixNormal = gl.getUniformLocation(gl.program, "matrixNormal");
     gl.program.uniform.matrixModelViewProjection = gl.getUniformLocation(gl.program, "matrixModelViewProjection");
+
+    // setup uniforms light and marerial
     gl.program.uniform.lightEnabled = gl.getUniformLocation(gl.program, "lightEnabled");
     gl.program.uniform.lightPosition = gl.getUniformLocation(gl.program, "lightPosition");
     gl.program.uniform.lightColor = gl.getUniformLocation(gl.program, "lightColor");
@@ -741,9 +831,7 @@ function initGLSL(gl)
     gl.program.uniform.materialDiffuse = gl.getUniformLocation(gl.program, "materialDiffuse");
     gl.program.uniform.materialSpecular = gl.getUniformLocation(gl.program, "materialSpecular");
     gl.program.uniform.materialShininess = gl.getUniformLocation(gl.program, "materialShininess");
-    gl.program.uniform.textureEnabled = gl.getUniformLocation(gl.program, "textureEnabled");
     gl.program.uniform.map0 = gl.getUniformLocation(gl.program, "map0");
-
 
     // set light and material uniforms
     gl.uniform1i(gl.program.uniform.lightEnabled, 1);    // toggle on/off lighting
@@ -754,19 +842,13 @@ function initGLSL(gl)
     gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material.getDiffuse());
     gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material.getSpecular());
     gl.uniform1f(gl.program.uniform.materialShininess, gl.material.shininess);
-    gl.uniform1i(gl.program.uniform.textureEnabled, 0);
     gl.uniform1i(gl.program.uniform.map0, 0);
-}
-
-
-
-///////////////////////////////////////////////////////////////////////////////
-function resetCamera()
-{
-    let deltaDistance = gl.camera.distance - CAMERA_DIST;
-    gl.camera.moveForward(deltaDistance, ANIM_DURATION);
-    gl.camera.shiftTo(new Vector3(0,0,0), ANIM_DURATION);
-    gl.camera.rotateTo(new Vector3(0,0,0), ANIM_DURATION);
+    
+    // clipping mode
+    gl.program.uniform.clipCoeff = gl.getUniformLocation(gl.program, "clipCoeff");
+    gl.program.uniform.clipMode = gl.getUniformLocation(gl.program, "clipMode");
+    gl.uniform4fv(gl.program.uniform.clipCoeff, new Float32Array([COEFF_A, COEFF_B, COEFF_C, COEFF_D]));
+    gl.uniform1i(gl.program.uniform.clipMode, 0);
 }
 
 
@@ -824,163 +906,198 @@ function startRendering(gl)
 ///////////////////////////////////////////////////////////////////////////////
 function initHtmlElements()
 {
-    let checkNormal = document.getElementById("checkNormal");
-    checkNormal.checked = false;
-    checkNormal.addEventListener("click", event =>
+    // add radio button event handler
+    let clipEye = document.getElementById("clipEye");
+    let clipObj = document.getElementById("clipObj");
+    clipEye.checked = true;
+    clipEye.addEventListener("click", e => gl.clipMode = 0);
+    clipObj.addEventListener("click", e => gl.clipMode = 1);
+
+    let textRadius = document.getElementById("sphereRadius");
+    textRadius.innerText = SPHERE_RADIUS;
+
+    let checkPlane = document.getElementById("checkPlane");
+    checkPlane.checked = gl.planeVisible;
+    checkPlane.addEventListener("change", () => gl.planeVisible = checkPlane.checked);
+
+    // add events for range
+    let labelA = document.getElementById("labelA");
+    let labelB = document.getElementById("labelB");
+    let labelC = document.getElementById("labelC");
+    let labelD = document.getElementById("labelD");
+    let rangeA = document.getElementById("rangeA");
+    let rangeB = document.getElementById("rangeB");
+    let rangeC = document.getElementById("rangeC");
+    let rangeD = document.getElementById("rangeD");
+    rangeA.value = COEFF_A;
+    labelA.innerText = COEFF_A;
+    rangeA.addEventListener("input", e =>
     {
-        gl.sphere.reverseNormals();
+        labelA.innerText = rangeA.value;
+        setCoefficients(parseFloat(rangeA.value), parseFloat(rangeB.value), parseFloat(rangeC.value), parseFloat(rangeD.value));
+    });
+    rangeB.value = COEFF_B;
+    labelB.innerText = COEFF_B;
+    rangeB.addEventListener("input", e =>
+    {
+        labelB.innerText = rangeB.value;
+        setCoefficients(parseFloat(rangeA.value), parseFloat(rangeB.value), parseFloat(rangeC.value), parseFloat(rangeD.value));
+    });
+    rangeC.value = COEFF_C;
+    labelC.innerText = COEFF_C;
+    rangeC.addEventListener("input", e =>
+    {
+        labelC.innerText = rangeC.value;
+        setCoefficients(parseFloat(rangeA.value), parseFloat(rangeB.value), parseFloat(rangeC.value), parseFloat(rangeD.value));
+    });
+    rangeD.value = COEFF_D;
+    labelD.innerText = COEFF_D;
+    rangeD.addEventListener("input", e =>
+    {
+        labelD.innerText = rangeD.value;
+        setCoefficients(parseFloat(rangeA.value), parseFloat(rangeB.value), parseFloat(rangeC.value), parseFloat(rangeD.value));
     });
 
-    let rangeRadius = document.getElementById("rangeRadius");
-    let labelRadius = document.getElementById("labelRadius");
-    rangeRadius.value = 1;
-    rangeRadius.addEventListener("input", event =>
-    {
-        labelRadius.innerHTML = rangeRadius.value;
-        gl.sphere.setRadius(parseFloat(rangeRadius.value));
-        if(checkNormal.checked)
-            gl.sphere.reverseNormals();
-        printSphere();
-    });
-
-    let rangeSector = document.getElementById("rangeSector");
-    let labelSector = document.getElementById("labelSector");
-    rangeSector.value = 36;
-    rangeSector.addEventListener("input", event =>
-    {
-        labelSector.innerHTML = rangeSector.value;
-        gl.sphere.setSectorCount(parseFloat(rangeSector.value));
-        if(checkNormal.checked)
-            gl.sphere.reverseNormals();
-        printSphere();
-    });
-
-    let rangeStack = document.getElementById("rangeStack");
-    let labelStack = document.getElementById("labelStack");
-    rangeStack.value = 18;
-    rangeStack.addEventListener("input", event =>
-    {
-        labelStack.innerHTML = rangeStack.value;
-        gl.sphere.setStackCount(parseFloat(rangeStack.value));
-        if(checkNormal.checked)
-            gl.sphere.reverseNormals();
-        printSphere();
-    });
-
-    let checkTexture = document.getElementById("checkTexture");
-    checkTexture.checked = false;
-    checkTexture.addEventListener("click", event =>
-    {
-        gl.textureEnabled = checkTexture.checked;
-    });
-
-    let checkWireframe = document.getElementById("checkWireframe");
-    checkWireframe.checked = false;
-    checkWireframe.addEventListener("click", event =>
-    {
-        gl.wireframeEnabled = checkWireframe.checked;
-    });
-
-    let checkSmooth = document.getElementById("checkSmooth");
-    checkSmooth.checked = false;
-    checkSmooth.addEventListener("click", event =>
-    {
-        gl.sphere.setSmooth(checkSmooth.checked);
-        if(checkNormal.checked)
-            gl.sphere.reverseNormals();
-        printSphere();
-    });
+    // set uniform with default coefficients
+    setCoefficients(COEFF_A, COEFF_B, COEFF_C, COEFF_D);
 
     let buttonReset = document.getElementById("buttonReset");
     buttonReset.addEventListener("click", event =>
     {
-        gl.sphere.set(1, 36, 18, false);
-        rangeRadius.value = 1;
-        labelRadius.innerHTML = 1;
-        rangeSector.value = 36;
-        labelSector.innerHTML = 36;
-        rangeStack.value = 18;
-        labelStack.innerHTML = 18;
-        checkTexture.checked = false;
-        checkWireframe.checked = false;
-        checkSmooth.checked = false;
-        checkNormal.checked = false;
-        gl.textureEnabled = false;
-        gl.wireframeEnabled = false;
-        printSphere();
+        labelA.innerText = COEFF_A;
+        labelB.innerText = COEFF_B;
+        labelC.innerText = COEFF_C;
+        labelD.innerText = COEFF_D;
+        rangeA.value = COEFF_A;
+        rangeB.value = COEFF_B;
+        rangeC.value = COEFF_C;
+        rangeD.value = COEFF_D;
+        setCoefficients(COEFF_A, COEFF_B, COEFF_C, COEFF_D);
         resetCamera();
     });
 }
 
 
-
-///////////////////////////////////////////////////////////////////////////////
-function printSphere()
+function setCoefficients(a, b, c, d)
 {
-    let info = document.getElementById("info");
-    if(info)
-    {
-        info.innerHTML = gl.sphere.toString();
-    }
+    gl.plane.set(a, b, c, d);
+    
+    let planeEq = document.getElementById("planeEq");
+    planeEq.innerText = a + "x " +
+                        ((b >= 0) ? "+ " + b : "- " + Math.abs(b)) + "y " +
+                        ((c >= 0) ? "+ " + c : "- " + Math.abs(c)) + "z " +
+                        ((d >= 0) ? "+ " + d : "- " + Math.abs(d)) + " = 0";    
 }
 
+
+
+///////////////////////////////////////////////////////////////////////////////
+function resetCamera()
+{
+    let deltaDistance = gl.camera.distance - CAMERA_DIST;
+    gl.camera.moveForward(deltaDistance, ANIM_DURATION);
+    gl.camera.shiftTo(new Vector3(0,0,0), ANIM_DURATION);
+    gl.camera.rotateTo(new Vector3(0,0,0), ANIM_DURATION);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create vbo for plane
+///////////////////////////////////////////////////////////////////////////////
+function initVBOs()
+{
+    let s = PLANE_WIDTH;     // side length
+    let planeVertices = new Float32Array([-s,-s, 0,   s,-s, 0,   s, s, 0,   s, s, 0,  -s, s, 0,  -s,-s, 0]);
+    let planeNormals  = new Float32Array([ 0, 0, 1,   0, 0, 1,   0, 0, 1,   0, 0, 1,   0, 0, 1,   0, 0, 1]);
+    let planeTexCoords = new Float32Array([ 0, 1,  1, 1,  1, 0,  1, 0,  0, 0,  0, 1]);
+    gl.vboPlane = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboPlane);
+    gl.bufferData(gl.ARRAY_BUFFER, planeVertices.byteLength + planeNormals.byteLength + planeTexCoords.byteLength, gl.STATIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, planeVertices);
+    gl.bufferSubData(gl.ARRAY_BUFFER, planeVertices.byteLength, planeNormals);
+    gl.bufferSubData(gl.ARRAY_BUFFER, planeVertices.byteLength + planeNormals.byteLength, planeTexCoords);
+    gl.vboPlane.normalOffset = planeVertices.byteLength;
+    gl.vboPlane.texCoordOffset = planeVertices.byteLength + gl.vboPlane.normalOffset;
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+}
+
+
+
 </script>
+
 </head>
 
 <body>
-
 <div class="contentblock">
 
 <div class="mainblock">
 <canvas id="webglView" width="300" height="300">
 </canvas>
-<pre id="info">
-</pre>
 </div>
 
 <div class="rightblock">
 <h2>
-Sphere
+Clipping Plane
 </h2>
-<div>
-<span>Radius</span>
-<br>
-<div style="display:flex;align-items:center;">
-<input id="rangeRadius" class="slider" type="range" min="0" max="5" step="0.1" value="1" style="flex:1;"><label id="labelRadius" style="flex:0 0 2em;margin-left:5px;">1</label>
-</div>
-</div>
+<p>
+A sphere with radius = <span id="sphereRadius">1</span>
+</p>
+
+<p>
+<label><input style="margin-bottom:10px;" type="checkbox" id="checkPlane"> Show Clipping Plane</label>
+</p>
 
 <div>
-<span>Sector Count</span>
+Clipping Mode:
 <br>
-<div style="display:flex;align-items:center;">
-<input id="rangeSector" class="slider" type="range" min="2" max="100" step="1" value="36" style="flex:1;"><label id="labelSector" style="flex:0 0 2em;margin-left:5px;">36</label>
+<form action="none">
+<input type="radio" name="group1" value="0" id="clipEye" checked="checked">
+<label for="clipEye">The clip plane is NOT transformed.</label>
+<br>
+<input type="radio" name="group1" value="1" id="clipObj">
+<label for="clipObj">The clip plane is transformed to eye space.</label>
+</form>
 </div>
-</div>
+<br>
 
 <div>
-<span>Stack Count</span>
-<br>
-<div style="display:flex;align-items:center;">
-<input id="rangeStack" class="slider" type="range" min="2" max="100" step="1" value="1" style="flex:1;"><label id="labelStack" style="flex:0 0 2em;margin-left:5px;">18</label>
+<fieldset class="slidergroup">
+<legend>Clipping Plane</legend>
+<span id="planeEq">Ax + By + Cz + D = 0</span>
+<div>&nbsp;</div>
+
+<div style="display:flex;align-items:center;margin-bottom:10px;">
+<span style="flex:0;">A:</span>
+<input style="flex:1;" type="range" id="rangeA" min="-5" max="5" step="0.01" value="0">
+<label id="labelA" style="flex:0 0 2.5em;margin-left:5px;">0</label>
 </div>
+<div style="display:flex;align-items:center;margin-bottom:10px;">
+<span style="flex:0;">B:</span>
+<input style="flex:1;" type="range" id="rangeB" min="-5" max="5" step="0.01" value="0">
+<label id="labelB" style="flex:0 0 2.5em;margin-left:5px;">0</label>
+</div>
+<div style="display:flex;align-items:center;margin-bottom:10px;">
+<span style="flex:0;">C:</span>
+<input style="flex:1;" type="range" id="rangeC" min="-5" max="5" step="0.01" value="0">
+<label id="labelC" style="flex:0 0 2.5em;margin-left:5px;">0</label>
+</div>
+<div style="display:flex;align-items:center;margin-bottom:10px;">
+<span style="flex:0;">D:</span>
+<input style="flex:1;" type="range" id="rangeD" min="-5" max="5" step="0.01" value="0">
+<label id="labelD" style="flex:0 0 2.5em;margin-left:5px;">0</label>
+</fieldset>
+
+<br>
+<button type="reset" style="width:100%; padding:5px;" id="buttonReset">Reset Plane Equation</button>
 </div>
 
-<div>
-<label><input style="margin-bottom:20px;" type="checkbox" id="checkTexture">Show Texture</label>
-<br>
-<label><input style="margin-bottom:20px;" type="checkbox" id="checkWireframe">Show Wireframe</label>
-<br>
-<label><input style="margin-bottom:20px;" type="checkbox" id="checkSmooth">Smooth Shading</label>
-<br>
-<label><input style="margin-bottom:20px;" type="checkbox" id="checkNormal">Reverse Normals</label>
 </div>
-
-<button type="reset" id="buttonReset">Reset</button>
+<!-- end of right block -->
 
 </div>
-<!-- end of rightblock -->
+<!-- end of content block -->
 
-</div> <!-- end of contentblock -->
 </body>
 </html>

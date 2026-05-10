@@ -76,7 +76,7 @@ hr {
 /* GUI */
 .gridbox {
     display:grid;
-    grid-template-columns:110px 185px;
+    grid-template-columns:120px 175px;
     gap:5px;
     font-size:0.8em;
 }
@@ -185,7 +185,13 @@ function initWebGL(canvasId)
     // init app ===============================================================
 
     gl.surfaceVisible = true;
+    gl.outlineVisible = false;
     gl.edgeAngle = EDGE_ANGLE;
+
+    // init edges
+    gl.edges = [];
+    gl.hardEdges = [];
+    gl.outlineEdges = [];
 
     gl.obj = new ObjModel(gl);
     gl.obj.read("files/models/angle_block.obj").then(obj =>
@@ -371,6 +377,24 @@ function drawEdges()
         gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
         gl.drawArrays(gl.LINES, 0, gl.vboHardEdge.count);
     }
+
+    // display outlines
+    if(gl.outlineVisible && gl.edges.length > 0)
+    {
+        // recalculate outline edges
+        let matrix = gl.matrixView.clone().multiply(gl.matrixModel).getRotationMatrix();
+        gl.outlineEdges = Edge.generateOutlineEdges(gl.edges, matrix);
+        if(gl.outlineEdges.length > 0)
+        {
+            gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([1, 0, 0, 1]));
+            let vertices = Edge.toFloat32Array(gl.outlineEdges);
+            gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboOutlineEdge);
+            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+            gl.vboOutlineEdge.count = vertices.length / 3;
+            gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+            gl.drawArrays(gl.LINES, 0, gl.vboOutlineEdge.count);
+        }
+    }
 }
 
 
@@ -519,6 +543,9 @@ function handlePointerMove(pe)
             gl.camera.angle.x = gl.camera.pointerAngle.x + (gl.pointers[0].y - gl.pointers.downs[0].y) * SCALE_ROTATE;
             gl.camera.angle.y = gl.camera.pointerAngle.y + (gl.pointers[0].x - gl.pointers.downs[0].x) * SCALE_ROTATE;
         }
+
+        let textOutlineEdges = document.getElementById("textOutlineEdges");
+        textOutlineEdges.innerText = gl.outlineEdges.length;
     }
 }
 
@@ -677,8 +704,8 @@ function initVBO(obj)
 
     // generate edges
     let vertices = ObjModel.toVertices(obj);
-    let edges = Edge.generateEdges(vertices);
-    gl.hardEdges = Edge.generateHardEdges(edges, gl.edgeAngle);
+    gl.edges = Edge.generateEdges(vertices);
+    gl.hardEdges = Edge.generateHardEdges(gl.edges, gl.edgeAngle);
     let hardEdgeVertices = Edge.toFloat32Array(gl.hardEdges);
     if(hardEdgeVertices.length > 0)
     {
@@ -688,6 +715,14 @@ function initVBO(obj)
         gl.vboHardEdge.count = hardEdgeVertices.length / 3;
     }
 
+    // compute outline edges
+    gl.outlineEdges = Edge.generateOutlineEdges(gl.edges, gl.matrixView.getRotationMatrix());
+    let outlineEdgeVertices = Edge.toFloat32Array(gl.outlineEdges);
+    gl.vboOutlineEdge = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboOutlineEdge);
+    gl.bufferData(gl.ARRAY_BUFFER, outlineEdgeVertices, gl.STATIC_DRAW);
+    gl.vboOutlineEdge.count = outlineEdgeVertices.length / 3;
+
     // reset camera
     gl.camera.distance = obj.radius * 2.5;
     gl.camera.angle.set(0, 0);
@@ -695,9 +730,11 @@ function initVBO(obj)
 
     // print edge info
     let textEdges = document.getElementById("textEdges");
-    textEdges.innerText = edges.length;
+    textEdges.innerText = gl.edges.length;
     let textHardEdges = document.getElementById("textHardEdges");
     textHardEdges.innerText = gl.hardEdges.length;
+    let textOutlineEdges = document.getElementById("textOutlineEdges");
+    textOutlineEdges.innerText = gl.outlineEdges.length;
 }
 
 
@@ -727,6 +764,20 @@ function initHtml()
         gl.surfaceVisible = checkSurface.checked;
     });
 
+    let checkOutline = document.form1.checkOutline;
+    checkOutline.checked = gl.outlineVisible;
+    checkOutline.addEventListener("change", () =>
+    {
+        gl.outlineVisible = checkOutline.checked;
+
+        gl.outlineEdges = Edge.generateOutlineEdges(gl.edges, gl.matrixView.getRotationMatrix());
+        let outlineEdgeVertices = Edge.toFloat32Array(gl.outlineEdges);
+        gl.vboOutlineEdge = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboOutlineEdge);
+        gl.bufferData(gl.ARRAY_BUFFER, outlineEdgeVertices, gl.STATIC_DRAW);
+        gl.vboOutlineEdge.count = outlineEdgeVertices.length / 3;
+    });
+
     let rangeAngle = document.form1.rangeAngle;
     rangeAngle.value = EDGE_ANGLE;
     rangeAngle.addEventListener("input", () =>
@@ -737,8 +788,8 @@ function initHtml()
 
         // recalculate hard edges
         let vertices = ObjModel.toVertices(gl.obj);
-        let edges = Edge.generateEdges(vertices);
-        gl.hardEdges = Edge.generateHardEdges(edges, gl.edgeAngle);
+        gl.edges = Edge.generateEdges(vertices);
+        gl.hardEdges = Edge.generateHardEdges(gl.edges, gl.edgeAngle);
         let hardEdgeVertices = Edge.toFloat32Array(gl.hardEdges);
         if(hardEdgeVertices.length > 0)
         {
@@ -750,7 +801,7 @@ function initHtml()
 
         // diplay edge counts
         let textEdges = document.getElementById("textEdges");
-        textEdges.innerText = edges.length;
+        textEdges.innerText = gl.edges.length;
         let textHardEdges = document.getElementById("textHardEdges");
         textHardEdges.innerText = gl.hardEdges.length;
     });
@@ -759,6 +810,8 @@ function initHtml()
     textEdges.innerText = "0";
     let textHardEdges = document.getElementById("textHardEdges");
     textHardEdges.innerText = "0";
+    let textOutlineEdges = document.getElementById("textOutlineEdges");
+    textOutlineEdges.innerText = gl.outlineEdges.length;
 }
 
 
@@ -784,7 +837,6 @@ WebGL Drawing Edges
 </h2>
 
 <form name="form1">
-<form name="form1">
 <label for="comboModel">Select OBJ: </label>
 <select id="comboModel">
 <option value="angle_block.obj" selected>Angle Block</option>
@@ -800,6 +852,8 @@ WebGL Drawing Edges
 
 <label><input style="margin-bottom:10px;" type="checkbox" id="checkSurface">Fill Surface</label>
 <br>
+<label><input style="margin-bottom:10px;" type="checkbox" id="checkOutline">Show Outline Edges</label>
+<br>
 
 <span>Hard Edge Angle:</span>
 <br>
@@ -813,6 +867,7 @@ WebGL Drawing Edges
 <div class="gridbox">
 <div class="gridcol1">Total # of edges: </div><div class="gridcol2" id="textEdges">0</div>
 <div class="gridcol1"># of hard edges: </div><div class="gridcol2" id="textHardEdges">0</div>
+<div class="gridcol1"># of outline edges: </div><div class="gridcol2" id="textOutlineEdges">0</div>
 </div>
 
 </div>
