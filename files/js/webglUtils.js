@@ -9,7 +9,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2011-03-01
-// UPDATED: 2026-04-24
+// UPDATED: 2026-06-12
 ///////////////////////////////////////////////////////////////////////////////
 
 // default 1x1 texture data
@@ -36,8 +36,11 @@ function isWebGLSupported()
 
 ///////////////////////////////////////////////////////////////////////////////
 // return WebGL rendering context if available
+// options are the context attributes (alpha, depth, stencil, desynchronized,
+// antialias, failIfMajorPerformanceCaveat, powerPreference, premulutipliedAlpha,
+// preserveDrawingBuffer, xrCompatible)
 ///////////////////////////////////////////////////////////////////////////////
-function getContextGL(canvas)
+function getContextGL(canvas, options = undefined)
 {
     let context = null;
     let names = ["webgl2", "webgl", "experimental-webgl", "moz-webgl", "webkit-3d"];
@@ -45,7 +48,8 @@ function getContextGL(canvas)
     {
         try{
 
-        context = canvas.getContext(names[i]);
+        context = canvas.getContext(names[i], options);
+
         if(context)
             break;
 
