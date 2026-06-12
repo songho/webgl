@@ -6,7 +6,7 @@ test for WebGL 2 (OpenGL ES 3.0)
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2011-12-16
-UPDATED: 2025-04-08
+UPDATED: 2026-06-12
 ===============================================================================
 -->
 
@@ -137,9 +137,14 @@ function initWebGL(canvasId)
         return false;
     }
 
+    // avaiable context attributes:
+    // alpha, depth, stencil, desynchronized, antialias, failIfMajorPerformanceCaveat,
+    // powerPreference, premulutipliedAlpha, preserveDrawingBuffer, xrCompatible   
+    let attribs = { stencil:true, antialia:true, powerPreference:"low-power" };
+
     // get gl context v2
     //gl = canvas.getContext("webgl2");
-    gl = getContextGL(canvas)
+    gl = getContextGL(canvas, attribs);
     if(!gl)
     {
         Logger.show();

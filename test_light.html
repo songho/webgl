@@ -469,7 +469,6 @@ function handleWheel(e)
             gl.camera.distance = gl.nearPlane;
         else if(gl.camera.distance > gl.farPlane)
             gl.camera.distance = gl.farPlane;
-log(gl.camera.distance);
 
         gl.matrixView.identity();
         gl.matrixView.rotateY(gl.camera.angle.y);
@@ -744,6 +743,7 @@ function initGLSL()
             // setup uniforms
             gl.useProgram(program);
             gl.uniform1i(program.uniform.map0, 0);
+            frame();
         }
     });
 
@@ -762,6 +762,7 @@ function initGLSL()
         if(program)
         {
             gl.shaderPrograms["blinnTex"] = program;
+            frame();
         }
     });
 
@@ -774,6 +775,7 @@ function initGLSL()
             // setup uniforms
             gl.useProgram(program);
             gl.uniform1f(program.uniform.pointSize, POINT_RADIUS);
+            frame();
         }
     });
 
