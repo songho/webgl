@@ -6,7 +6,7 @@ test for clipping
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2012-01-30
-UPDATED: 2026-05-10
+UPDATED: 2026-07-08
 ===============================================================================
 -->
 
@@ -112,6 +112,7 @@ input[type=range] {
 <script src="files/js/Matrices.js"></script>
 <script src="files/js/Plane.js"></script>
 <script src="files/js/Sphere.js"></script>
+<script src="files/js/Cylinder.js"></script>
 <script src="files/js/Quaternion.js"></script>
 <script src="files/js/Light.js"></script>
 <script src="files/js/Material.js"></script>
@@ -304,11 +305,12 @@ const ANIM_DURATION = 500;
 const IMAGE_PATH = "files/images/";
 const GLSL_PATH = "files/glsl/";
 const COEFF_A = 1;
-const COEFF_B = 0;
-const COEFF_C = 0;
+const COEFF_B = -0.4;
+const COEFF_C = -0.2;
 const COEFF_D = 0.5;
 const SPHERE_RADIUS = 2;
 const PLANE_WIDTH = 3;
+const LINE_LENGTH = 5;
 
 
 
@@ -351,7 +353,7 @@ function initWebGL(canvasId)
     }
 
     // get context
-    gl = getContextGL(canvas);
+    gl = getContextGL(canvas, {stencil:true});
     if(!gl)
     {
         //log("[ERROR] Failed to get WebGL context.");
@@ -379,6 +381,10 @@ function initWebGL(canvasId)
     gl.plane.normalize();
     gl.clipMode = 0;
     gl.planeVisible = true;
+    gl.capVisible = true;
+
+    // axis
+    gl.line = new Cylinder(gl, 0.02, 0.02, LINE_LENGTH, 18, 1, true);
 
     // create sphere, param: (gl, radius, sectors, stacks, smooth=true)
     gl.sphere = new Sphere(gl, SPHERE_RADIUS, 72, 36, true);
@@ -432,19 +438,54 @@ function initWebGL(canvasId)
 ///////////////////////////////////////////////////////////////////////////////
 function frame()
 {
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    gl.disable(gl.CULL_FACE);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
 
+    // draw axis
+    drawAxis();
+
+    // draw sphere with a clipping plane
+    gl.disable(gl.CULL_FACE);
+    drawSphere();
+    gl.enable(gl.CULL_FACE);
+
+    // draw plane and cap
+    if(gl.planeVisible)
+    {
+        gl.disable(gl.CULL_FACE);
+        drawPlane();
+        gl.enable(gl.CULL_FACE);
+    }
+    else if(gl.capVisible)
+    {
+        drawCap(); // draw cap using stencil buffer
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// post frame
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+}
+
+
+
+//////////////////////////////////////////////////////////////////////////
+// draw sphere with clipping plane
+function drawSphere()
+{
     gl.program = gl.shaderPrograms["clip"];
+    if(!gl.program)
+        return;
     gl.useProgram(gl.program);
 
     // view transform
     gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
 
     // model transform
-    //gl.angle += gl.frameTime * 0.0005;
     gl.matrixModel.identity();
-    //gl.matrixModel.rotateX(-Math.PI / 2);
 
     // compute modelview transform
     gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
@@ -479,24 +520,12 @@ function frame()
     gl.vertexAttribPointer(gl.program.attribute.texCoord, 2, gl.FLOAT, false, gl.sphere.stride, 24);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.sphere.vboIndex);
     gl.drawElements(gl.TRIANGLES, gl.sphere.getIndexCount(), gl.UNSIGNED_SHORT, 0);
-
-    if(gl.planeVisible)
-        drawPlane();
 }
 
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// post frame
-///////////////////////////////////////////////////////////////////////////////
-function postFrame()
-{
-}
-
-
-
-///////////////////////////////////////////////////////////////////////////////
-function drawPlane()
+function drawPlane(frontFace = true)
 {
     gl.program = gl.shaderPrograms["phong"];
     if(!gl.program)
@@ -505,6 +534,8 @@ function drawPlane()
 
     let n = gl.plane.normal.clone();
     let t = n.clone().normalize().scale(gl.plane.getDistance());
+    if(!frontFace)
+        n.scale(-1);
     let matrix = new Matrix4();
     matrix.lookAt(n.x, n.y, n.z);
     matrix.translate(t.x, t.y, t.z);
@@ -545,6 +576,134 @@ function drawPlane()
     gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, gl.vboPlane.normalOffset);
     //gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord, 2, gl.FLOAT, false, 0, gl.vboPlane.texCoordOffset);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// 1. generate the cap mask in stencil buffer (backface - frontface)
+// 2. draw clipping plane by masking
+///////////////////////////////////////////////////////////////////////////////
+function drawCap()
+{
+    // single-pass masking =================================
+    // enable stencil test
+    gl.enable(gl.STENCIL_TEST);
+    gl.disable(gl.CULL_FACE);
+
+    // draw to stencil buffer only to generate mask
+    // value=1: mask
+    // value=2: frontface
+    gl.colorMask(false, false, false, false);   // disable writing to color buffer
+    gl.disable(gl.DEPTH_TEST);                  // disable depth test for mask
+    gl.stencilFunc(gl.ALWAYS, 1, 0xff);
+    gl.stencilOp(gl.KEEP, gl.KEEP, gl.INCR);    // fail, zfail, zpass
+    drawSphere();
+
+    // draw clipping plane with the mask
+    gl.colorMask(true, true, true, true);       // enable writing to color buffer
+    gl.enable(gl.DEPTH_TEST);                   // enable depth test
+    gl.stencilFunc(gl.EQUAL, 1, 0xff);
+    gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+    drawPlane(false);
+
+    gl.disable(gl.STENCIL_TEST); 
+
+
+    /*
+    // multi-pass masking =================================
+    // enable stencil test
+    gl.enable(gl.STENCIL_TEST);
+
+    // PASS1: draw the backface to stencil buffer
+    gl.colorMask(false, false, false, false);   // disable writing to color buffer
+    gl.disable(gl.DEPTH_TEST);                  // disable depth test for mask
+    gl.cullFace(gl.FRONT);                      // cull front face
+    gl.stencilFunc(gl.ALWAYS, 1, 0xff);
+    gl.stencilOp(gl.KEEP, gl.KEEP, gl.INCR);    // fail, zfail, zpass
+    drawSphere();
+
+    // PASS2: draw the frontface to stencil buffer
+    gl.cullFace(gl.BACK);                       // cull back face
+    gl.stencilFunc(gl.GEQUAL, 1, 0xff);         // EQUAL would work as well
+    gl.stencilOp(gl.KEEP, gl.KEEP, gl.DECR);    // subtract front face area from prev stencil buffer
+    drawSphere();
+
+    // draw clipping plane with the mask
+    gl.colorMask(true, true, true, true);       // enable writing to color buffer
+    gl.enable(gl.DEPTH_TEST);                   // enable depth test
+    gl.stencilFunc(gl.EQUAL, 1, 0xff);
+    gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+    drawPlane(false);
+
+    gl.disable(gl.STENCIL_TEST);
+        */
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function drawAxis()
+{
+    gl.program = gl.shaderPrograms["flat"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    // transform matrix
+    let matrixModel = new Matrix4();
+
+    if(gl.clipMode == 0)
+    {
+        let matrixView = new Matrix4();
+        matrixView.setTranslation(0, 0, -gl.camera.distance);
+        gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, matrixView.m);
+    }
+    else
+    {
+        gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    }
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+
+    // x-axis
+    const D2R = Math.PI  / 180;
+    let color = new Vector4(1, 0, 0, 1);
+    matrixModel.translate(0, 0, LINE_LENGTH*0.5);
+    matrixModel.rotateY(90 * D2R);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrixModel.m);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, color.toFloat32Array());
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.line.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.position, 3, gl.FLOAT, false, gl.line.stride, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.line.vboIndex);
+    gl.drawElements(gl.TRIANGLES, gl.line.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+
+    // y-axis
+    color.set(0, 1, 0, 1);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, color.toFloat32Array());
+    matrixModel.identity();
+    matrixModel.translate(0, 0, LINE_LENGTH*0.5);
+    matrixModel.rotateX(-90 * D2R);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrixModel.m);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, color.toFloat32Array());
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.line.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.position, 3, gl.FLOAT, false, gl.line.stride, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.line.vboIndex);
+    gl.drawElements(gl.TRIANGLES, gl.line.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+
+    // z-axis
+    color.set(0, 0, 1, 1);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, color.toFloat32Array());
+    matrixModel.identity();
+    matrixModel.translate(0, 0, LINE_LENGTH*0.5);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrixModel.m);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, color.toFloat32Array());
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.line.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.position, 3, gl.FLOAT, false, gl.line.stride, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.line.vboIndex);
+    gl.drawElements(gl.TRIANGLES, gl.line.getIndexCount(), gl.UNSIGNED_SHORT, 0);
 }
 
 
@@ -757,6 +916,9 @@ function initGL(width, height)
     //gl.cullFace(gl.BACK);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    
+    gl.enable(gl.STENCIL_TEST);
+    gl.clearStencil(0x0);
 
     // default light
     gl.light = new Light(0, 0, 0, 1);
@@ -817,7 +979,19 @@ function initGLSL()
         gl.shaderPrograms["phong"] = program;
    });
 
+    // load flat shader
+    createShaderProgram(gl, GLSL_PATH+"gles_flat.vert", GLSL_PATH+"gles_flat.frag").then(program =>
+    {
+        gl.useProgram(program);
 
+        // setup uniforms
+        gl.uniform4fv(program.uniform.materialDiffuse, new Float32Array([1,1,1,1]));
+        gl.uniform1i(program.uniform.matrixComputed, false);
+
+        gl.shaderPrograms["flat"] = program;
+    });
+
+    // load clip shader from at the top of this file
     // create shader objects
     let vertexShader = loadShaderById(gl, "vert-clip");
     let fragmentShader = loadShaderById(gl, "frag-clip");
@@ -956,6 +1130,10 @@ function initHtmlElements()
     checkPlane.checked = gl.planeVisible;
     checkPlane.addEventListener("change", () => gl.planeVisible = checkPlane.checked);
 
+    let checkCap = document.getElementById("checkCap");
+    checkCap.checked = gl.capVisible;
+    checkCap.addEventListener("change", () => gl.capVisible = checkCap.checked);
+
     // add events for range
     let labelA = document.getElementById("labelA");
     let labelB = document.getElementById("labelB");
@@ -1083,6 +1261,9 @@ A sphere with radius = <span id="sphereRadius">1</span>
 
 <p>
 <label><input style="margin-bottom:10px;" type="checkbox" id="checkPlane"> Show Clipping Plane</label>
+<br>
+<label><input style="margin-bottom:10px;" type="checkbox" id="checkCap"> Cap Clipping</label>
+
 </p>
 
 <div>
@@ -1106,17 +1287,17 @@ Clipping Mode:
 
 <div style="display:flex;align-items:center;">
 <span style="flex:0;">A:</span>
-<input class="slider" style="flex:1;" type="range" id="rangeA" min="-5" max="5" step="0.01" value="0">
+<input class="slider" style="flex:1;" type="range" id="rangeA" min="-1" max="1" step="0.01" value="0">
 <label id="labelA" style="flex:0 0 2.5em;margin-left:5px;">0</label>
 </div>
 <div style="display:flex;align-items:center;">
 <span style="flex:0;">B:</span>
-<input class="slider" style="flex:1;" type="range" id="rangeB" min="-5" max="5" step="0.01" value="0">
+<input class="slider" style="flex:1;" type="range" id="rangeB" min="-1" max="1" step="0.01" value="0">
 <label id="labelB" style="flex:0 0 2.5em;margin-left:5px;">0</label>
 </div>
 <div style="display:flex;align-items:center;">
 <span style="flex:0;">C:</span>
-<input class="slider" style="flex:1;" type="range" id="rangeC" min="-5" max="5" step="0.01" value="0">
+<input class="slider" style="flex:1;" type="range" id="rangeC" min="-1" max="1" step="0.01" value="0">
 <label id="labelC" style="flex:0 0 2.5em;margin-left:5px;">0</label>
 </div>
 <div style="display:flex;align-items:center;">
