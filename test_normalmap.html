@@ -6,7 +6,7 @@ test loading normal map
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2013-07-22
-UPDATED: 2026-04-24
+UPDATED: 2026-07-17
 ===============================================================================
 -->
 
@@ -754,7 +754,7 @@ function initSphere(gl)
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indices, gl.STATIC_DRAW);
     gl.ibo.indexCount = model.indices.length;
 
-    log("Initialized VBO for cube.");
+    log("Initialized VBO for sphere.");
 }
 
 
@@ -797,7 +797,7 @@ function initCylinder(gl)
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indices, gl.STATIC_DRAW);
     gl.ibo.indexCount = model.indices.length;
 
-    log("Initialized VBO for cube.");
+    log("Initialized VBO for cylinder.");
 }
 
 
@@ -840,7 +840,7 @@ function initCone(gl)
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indices, gl.STATIC_DRAW);
     gl.ibo.indexCount = model.indices.length;
 
-    log("Initialized VBO for cube.");
+    log("Initialized VBO for cone.");
 }
 
 
@@ -883,7 +883,7 @@ function initTorus(gl)
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, model.indices, gl.STATIC_DRAW);
     gl.ibo.indexCount = model.indices.length;
 
-    log("Initialized VBO for cube.");
+    log("Initialized VBO for torus.");
 }
 
 
@@ -973,6 +973,7 @@ WebGL Normal Map
 <option value="cylinder">Cylinder</option>
 <option value="cone">Cone</option>
 <option value="torus">Torus</option>
+<option value="knot">TorusKnot</option>
 </select>
 <br>
 <br>
