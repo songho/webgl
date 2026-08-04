@@ -260,6 +260,8 @@ function initWebGL(canvasId)
 
     // load a texture
     gl.tex0 = loadTexture(gl, "files/images/grid512.png", false, tex => frame());
+    gl.tex1 = loadTexture(gl, "files/images/debugger.png", false, tex => frame());
+    gl.tex2 = loadTexture(gl, "files/images/Beethoven_1024.png", false, tex => frame());
     gl.textureUsed = true;
 
     // init array of pointer objects
@@ -332,7 +334,14 @@ function frame()
         if(!gl.program) return;
         gl.useProgram(gl.program);
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
+        if(!gl.obj.name)
+            gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
+        else if(gl.obj.name.startsWith("debugger"))
+            gl.bindTexture(gl.TEXTURE_2D, gl.tex1);
+        else if(gl.obj.name.startsWith("Beethoven_20k"))
+            gl.bindTexture(gl.TEXTURE_2D, gl.tex2);
+        else
+            gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
     }
     else
     {
@@ -758,7 +767,8 @@ function initDom()
             objList.forEach(e => e.classList.remove("activelist"));
             // add active on selected list
             li.classList.add("activelist");
-            gl.obj.name = li.id
+            gl.obj.name = li.id;
+            log("Name: " + li.id);
             loadObjFile("files/models/" + li.id);
         });
     });
@@ -877,7 +887,7 @@ OBJ: <span id="textName"></span>
 Sample OBJs
 </h3>
 <ul class="listbox">
-<li id="debugger_5k.obj">debugger_5k.obj</li>
+<li id="debugger_10k.obj">debugger_10k.obj</li>
 <li id="Beethoven_20k.obj">Beethoven_20k.obj</li>
 <li id="dragon.obj">dragon.obj</li>
 <li id="teapot.obj">teapot.obj</li>
