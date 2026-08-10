@@ -177,7 +177,7 @@ function generateSobelKernel(direction=0)
 ///////////////////////////////////////////////////////////////////////////////
 // generate 3x3 emboss kernel based on Sobel (row-major)
 // direction: 0 = top-left to bottom-right
-//            1 = top-left to bottom-left 
+//            1 = top-right to bottom-left 
 // It returns Float32Array
 ///////////////////////////////////////////////////////////////////////////////
 function generateEmbossKernel(direction=0)
@@ -231,7 +231,7 @@ function generateSharpeningKernel()
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// return sum of kernel elements, should be 1
+// return sum of kernel elements, should be 1 for low-pass and 0 for high-pass
 ///////////////////////////////////////////////////////////////////////////////
 function computeKernelSum(kernel)
 {
