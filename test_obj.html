@@ -6,7 +6,7 @@ test for loading OBJ model with texture
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2011-12-16
-UPDATED: 2026-02-06
+UPDATED: 2026-08-04
 ===============================================================================
 -->
 
@@ -682,8 +682,6 @@ function initGLSL(gl)
         gl.shaderPrograms["phong"] = program;
         frame();
     });
-
-    gl.shadingModel = "phongTex";   // default shading
 }
 
 
@@ -777,6 +775,7 @@ function initDom()
     buttonReset.addEventListener("click", () =>
     {
         loadObjFile("files/models/torus_hard.obj");
+        gl.obj.name = "torus_hard.obj";
         objList.forEach(e => e.classList.remove("activelist"));
     });
 
@@ -793,6 +792,8 @@ function loadObjFile(file)
 
         initVBO(obj);
         displayObjInfo(obj);
+        //gl.obj.area = computeArea(gl.obj.vertices, gl.obj.indices);
+        //gl.obj.volume = computeVolumn(gl.obj.vertices, gl.obj.indices);
 
         let checkTexture = document.getElementById("checkTexture");
         if(obj.texCoordCount == 0)
