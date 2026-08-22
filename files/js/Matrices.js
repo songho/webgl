@@ -10,7 +10,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2011-01-21
-// UPDATED: 2021-07-09
+// UPDATED: 2026-08-22
 //
 // Copyright (C) 2011. Song Ho Ahn
 ///////////////////////////////////////////////////////////////////////////////
@@ -565,6 +565,43 @@ Matrix4.prototype =
         this.setLeftAxis(l.x, l.y, l.z);
         this.setUpAxis(u.x, u.y, u.z);
         this.setForwardAxis(f.x, f.y, f.z);
+        return this;
+    },
+    reflect: function(n, d)
+    {
+        let xx2 = 2 * n.x * n.x;
+        let xy2 = 2 * n.x * n.y;
+        let xz2 = 2 * n.x * n.z;
+        let yz2 = 2 * n.y * n.z;
+        let yy2 = 2 * n.y * n.y;
+        let zz2 = 2 * n.z * n.z;
+        
+        let r0 = 1 - xx2,  r4 = -xy2,     r8 = -xz2,      r12 = 2 * d * n.x,
+            r1 = -xy2,     r5 = 1 - yy2,  r9 = -yz2,      r13 = 2 * d * n.y,
+            r2 = -xz2,     r6 = -yz2,     r10 = 1 - zz2,  r14 = 2 * d * n.z;
+
+        let m0 = this.m[0],  m4 = this.m[4],  m8 = this.m[8],  m12= this.m[12],
+            m1 = this.m[1],  m5 = this.m[5],  m9 = this.m[9],  m13= this.m[13],
+            m2 = this.m[2],  m6 = this.m[6],  m10= this.m[10], m14= this.m[14],
+            m3 = this.m[3],  m7 = this.m[7],  m11= this.m[11], m15= this.m[15];
+
+        this.m[0] = r0 * m0 + r4 * m1 + r8 * m2 + r12 * m3;
+        this.m[1] = r1 * m0 + r5 * m1 + r9 * m2 + r13 * m3;
+        this.m[2] = r2 * m0 + r6 * m1 + r10* m2 + r14 * m3;
+        this.m[3] = m3;
+        this.m[4] = r0 * m4 + r4 * m5 + r8 * m6 + r12 * m7;
+        this.m[5] = r1 * m4 + r5 * m5 + r9 * m6 + r13 * m7;
+        this.m[6] = r2 * m4 + r6 * m5 + r10* m6 + r14 * m7;
+        this.m[7] = m7;
+        this.m[8] = r0 * m8 + r4 * m9 + r8 * m10 + r12 * m11;
+        this.m[9] = r1 * m8 + r5 * m9 + r9 * m10 + r13 * m11;
+        this.m[10]= r2 * m8 + r6 * m9 + r10* m10 + r14 * m11;
+        this.m[11]= m11;
+        this.m[12]= r0 * m12+ r4 * m13+ r8 * m14 + r12 * m15;
+        this.m[13]= r1 * m12+ r5 * m13+ r9 * m14 + r13 * m15;
+        this.m[14]= r2 * m12+ r6 * m13+ r10* m14 + r14 * m15;
+        this.m[15]= m15;
+
         return this;
     },
     transform: function(v)
