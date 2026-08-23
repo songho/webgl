@@ -567,18 +567,18 @@ Matrix4.prototype =
         this.setForwardAxis(f.x, f.y, f.z);
         return this;
     },
-    reflect: function(n, d)
+    reflect: function(a, b, c, d)
     {
-        let xx2 = 2 * n.x * n.x;
-        let xy2 = 2 * n.x * n.y;
-        let xz2 = 2 * n.x * n.z;
-        let yz2 = 2 * n.y * n.z;
-        let yy2 = 2 * n.y * n.y;
-        let zz2 = 2 * n.z * n.z;
+        let aa2 = 2 * a * a;
+        let ab2 = 2 * a * b;
+        let ac2 = 2 * a * c;
+        let bc2 = 2 * b * c;
+        let bb2 = 2 * b * b;
+        let cc2 = 2 * c * c;
         
-        let r0 = 1 - xx2,  r4 = -xy2,     r8 = -xz2,      r12 = 2 * d * n.x,
-            r1 = -xy2,     r5 = 1 - yy2,  r9 = -yz2,      r13 = 2 * d * n.y,
-            r2 = -xz2,     r6 = -yz2,     r10 = 1 - zz2,  r14 = 2 * d * n.z;
+        let r0 = 1 - aa2,  r4 = -ab2,     r8 = -ac2,      r12 = -2 * d * a,
+            r1 = -ab2,     r5 = 1 - bb2,  r9 = -bc2,      r13 = -2 * d * b,
+            r2 = -ac2,     r6 = -bc2,     r10 = 1 - cc2,  r14 = -2 * d * c;
 
         let m0 = this.m[0],  m4 = this.m[4],  m8 = this.m[8],  m12= this.m[12],
             m1 = this.m[1],  m5 = this.m[5],  m9 = this.m[9],  m13= this.m[13],
