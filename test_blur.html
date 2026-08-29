@@ -6,7 +6,7 @@ testing blur with Gaussian kernel
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2017-08-02
-UPDATED: 2025-09-23
+UPDATED: 2026-08-29
 ===============================================================================
 -->
 
@@ -708,6 +708,28 @@ function startRendering(gl)
 ///////////////////////////////////////////////////////////////////////////////
 function initHtml()
 {
+    let fileImage = document.getElementById("fileImage");
+    fileImage.value = "";
+    fileImage.addEventListener("change", () =>
+    {
+        let file = fileImage.files[0];
+        let fileUrl = window.URL.createObjectURL(file);
+        let img = new Image();
+        img.src = fileUrl;
+        gl.tex0 = loadTexture(gl, fileUrl, false, tex =>
+        {
+            gl.tex0.width = img.width;
+            gl.tex0.height = img.height;
+            resizeQuad();
+            // resize fbos
+            gl.fbo1.init(gl.tex0.width, gl.tex0.height);
+            gl.fbo2.init(gl.tex0.width, gl.tex0.height);
+            gl.texQuad.set(0, gl.tex0.width, 0, gl.tex0.height);
+
+            frame();
+        });
+    });
+
     let rangeSigma = document.form1.rangeSigma;
     rangeSigma.value = SIGMA;
     rangeSigma.addEventListener("input", () =>
@@ -721,7 +743,7 @@ function initHtml()
         //console.log(computeGaussianKernelSize(gl.sigma));
 
         // build half of gaussian kernel
-        gl.kernel = generateHalfGaussianKernel(SIGMA, gl.halfKernelSize);
+        gl.kernel = generateHalfGaussianKernel(gl.sigma, gl.halfKernelSize);
         gl.kernel = resizeHalfKernel(gl.kernel, MAX_HALF_KERNEL); // pad 0s
 
         document.getElementById("textKernelSize").innerText = gl.halfKernelSize;
@@ -756,6 +778,41 @@ function initHtml()
     let textKernelSum = document.getElementById("textKernelSum");
     textKernelSum.innerText = computeHalfKernelSum(gl.kernel).toFixed(5);
     printKernel(gl.kernel);
+
+    let buttonReset = document.getElementById("reset");
+    buttonReset.addEventListener("click", () =>
+    {
+        rangeSigma.value = SIGMA;
+        gl.sigma = SIGMA;
+        document.getElementById("labelSigma").innerText = SIGMA;
+        radioDirection.value = "both";
+        gl.convolveMode = 0; // both
+        fileImage.value = "";
+
+        // build half of gaussian kernel
+        gl.halfKernelSize = Math.floor(computeGaussianKernelSize(gl.sigma) / 2) + 1;
+        gl.kernel = generateHalfGaussianKernel(gl.sigma, gl.halfKernelSize);
+        gl.kernel = resizeHalfKernel(gl.kernel, MAX_HALF_KERNEL); // pad 0s
+
+        document.getElementById("textKernelSize").innerText = gl.halfKernelSize;
+        document.getElementById("textKernelSum").innerText = computeHalfKernelSum(gl.kernel).toFixed(5);
+        document.getElementById("textArrayLength").innerText = gl.kernel.length;
+        printKernel(gl.kernel);
+
+        gl.tex0 = loadTexture(gl, "files/images/lena_color_512.jpg", false, tex =>
+        {
+            gl.tex0.width = 512;
+            gl.tex0.height = 512;
+            resizeQuad();
+
+            // resize fbos
+            gl.fbo1.init(gl.tex0.width, gl.tex0.height);
+            gl.fbo2.init(gl.tex0.width, gl.tex0.height);
+            gl.texQuad.set(0, gl.tex0.width, 0, gl.tex0.height);
+
+            frame();
+        });
+    });
 }
 
 function printKernel(kernel)
@@ -814,6 +871,11 @@ WebGL: Gaussian Blur
 </h2>
 
 <form name="form1">
+<label for="fileImage">Choose Image File: </label>
+<input type="file" id="fileImage" name="fileImage" value="" accept="image/*">
+<br>
+<br>
+
 <span>Sigma (&sigma;):</span>
 <br>
 <div class="flexbox">
@@ -847,6 +909,9 @@ Convolution Direction:
 <div id="kernelvalue">
 </div>
 </div>
+<br>
+
+<input type="button" style="width:100%; padding:5px;" name="reset" id="reset" value="Reset">
 
 </div>
 <!-- end of rightblock -->
