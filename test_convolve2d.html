@@ -354,7 +354,7 @@ function convolve2D(texId, fbo)
 {
     gl.program = gl.shaderPrograms["convolve2d"];
     if(!gl.program) return;
-    gl.useProgram(gl.program);
+        gl.useProgram(gl.program);
 
     fbo.bind();
 
