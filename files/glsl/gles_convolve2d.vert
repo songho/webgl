@@ -1,11 +1,14 @@
 ///////////////////////////////////////////////////////////////////////////////
 // gles_convole2d.vert
 // ===================
-// 2d convolution with 3x3 kernel
+// 2d convolution with 3x3 kernel (row-major)
+//     | 0 1 2 |
+// k = | 3 4 5 |
+//     | 6 7 8 |
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2012-09-26
-// UPDATED: 2025-07-03
+// UPDATED: 2026-09-12
 ///////////////////////////////////////////////////////////////////////////////
 
 // input vertex attributes
