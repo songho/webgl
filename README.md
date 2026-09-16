@@ -19,7 +19,7 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 16. [Loading Normal Map](https://www.songho.ca/webgl/webgl_normalmap.html): Loading and drawing a normal map 
 17. [Drawing Sprite](https://www.songho.ca/webgl/webgl_sprite.html): Drawing sprites using Sprite class 
 18. [Drawing 2D Image](https://www.songho.ca/webgl/webgl_image.html): Drawing 2D image using Quad class 
-19. [Render To Texture](https://www.songho.ca/webgl/webgl_rtt.html): Render to Texture using FrameBuffer class 
+19. [Render To Texture](https://www.songho.ca/webgl/webgl_rtt.html): Render to Texture using FrameBuffer (FBO) class 
 20. [Gaussian Blur](https://www.songho.ca/webgl/webgl_blur.html): Convolution with seperable Gaussian kernel 
 21. [Loading OBJ](https://www.songho.ca/webgl/webgl_obj.html): Parse and render an OBJ file using ObjModel class
 22. [Loading STL](https://www.songho.ca/opengl/gl_stl.html): Parse and render a STL model using StlModel class
