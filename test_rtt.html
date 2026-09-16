@@ -241,6 +241,8 @@ function initWebGL(canvasId)
     gl.textureSize = TEXTURE_SIZE;
     gl.fbo = new FrameBuffer(gl);
     gl.fbo.init(gl.textureSize, gl.textureSize);    // width, height
+    gl.fboAttach = "color";
+    //console.log(gl.fbo.depthBits);
 
     // init VBO
     initCube(gl);
@@ -377,17 +379,20 @@ function postFrame()
 ///////////////////////////////////////////////////////////////////////////////
 function drawToTexture()
 {
-    gl.fbo.bind();
-
-    gl.clearColor(0.9, 0.9, 0.9, 1.0);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-    gl.viewport(0, 0, gl.textureSize, gl.textureSize);
-    let matrixProjection = Matrix4.makePerspective(45, gl.textureSize/gl.textureSize, gl.nearPlane, gl.farPlane);
-
     gl.program = gl.shaderPrograms["goochTex"];
     if(!gl.program) return;
     gl.useProgram(gl.program);
+
+    gl.fbo.bind();
+
+    gl.clearColor(1.0, 1.0, 1.0, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // make depth range short
+    let near = gl.obj.radius * 1.5;
+    let far = gl.obj.radius * 3.5;
+    gl.viewport(0, 0, gl.textureSize, gl.textureSize);
+    let matrixProjection = Matrix4.makePerspective(45, gl.textureSize/gl.textureSize, near, far);
 
     // compute view matrix
     let matrixView = new Matrix4();
@@ -434,12 +439,15 @@ function drawToTexture()
 ///////////////////////////////////////////////////////////////////////////////
 function drawCube()
 {
-    gl.clearColor(0.0, 0.0, 0.0, 0.0);
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-
-    gl.program = gl.shaderPrograms["phongTex"];
+    if(gl.fboAttach == "color")
+        gl.program = gl.shaderPrograms["phongTex"];        
+    else if(gl.fboAttach == "depth")
+        gl.program = gl.shaderPrograms["phongDepth"];        
     if(!gl.program) return;
     gl.useProgram(gl.program);
+
+    gl.clearColor(1.0, 1.0, 1.0, 0.0);
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
     // update view matrices
     gl.matrixView.identity();
@@ -462,7 +470,10 @@ function drawCube()
     gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
 
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, gl.fbo.tex);
+    if(gl.fboAttach == "color")
+        gl.bindTexture(gl.TEXTURE_2D, gl.fbo.tex);
+    else if(gl.fboAttach == "depth")
+        gl.bindTexture(gl.TEXTURE_2D, gl.fbo.depth);
 
     // draw obj model
     if(gl.vbo && gl.ibo)
@@ -733,6 +744,23 @@ function initGLSL(gl)
 
         gl.shaderPrograms["phongTex"] = program;
     });
+
+    // load phong shader with depth map
+    createShaderProgram(gl, GLSL_PATH+"gles_phongDepth.vert", GLSL_PATH+"gles_phongDepth.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
+        gl.uniform4fv(program.uniform.lightColor, gl.light.getColor());
+        gl.uniform4fv(program.uniform.materialAmbient, gl.material.getAmbient());
+        gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
+        gl.uniform4fv(program.uniform.materialSpecular, gl.material.getSpecular());
+        gl.uniform1f(program.uniform.materialShininess, gl.material.shininess);
+        gl.uniform1i(program.uniform.map0, 0);
+
+        gl.shaderPrograms["phongDepth"] = program;
+    });
 }
 
 
@@ -862,6 +890,17 @@ function initHtml()
         // resize frame buffer
         gl.fbo.init(gl.textureSize, gl.textureSize);
     });
+
+    let radioBuffer = document.getElementsByName("radioBuffer");
+    radioBuffer[0].checked = true;
+    gl.fboAttach = "color";
+    radioBuffer.forEach(radio =>
+    {
+        radio.onclick = () =>
+        {
+            gl.fboAttach = radio.value;
+        };
+    });
 }
 
 </script>
@@ -886,12 +925,20 @@ function initHtml()
 Render To Texture
 </h2>
 
+
 <span>Texture Size:</span>
 <br>
 <div class="flexbox">
 <input class="flexcol1" type="range" name="rangeSize" id="rangeSize" min="1" max="12" step="1" value="9"><label class="flexcol2" id="labelSize" class="col3">512 x 512</label>
 </div>
 <br>
+<div>
+<input type="radio" name="radioBuffer" id="radioColor" value="color">
+<label for="radioColor">Color Buffer</label>
+<br>
+<input type="radio" name="radioBuffer" id="radioDepth" value="depth">
+<label for="radioDepth">Depth Buffer</label>
+</div>
 
 </div>
 <!-- end of rightblock -->
