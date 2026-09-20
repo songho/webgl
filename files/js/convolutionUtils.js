@@ -5,13 +5,14 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2025-05-22
-// UPDATED: 2025-06-29
+// UPDATED: 2026-09-18
 ///////////////////////////////////////////////////////////////////////////////
 
 
 ///////////////////////////////////////////////////////////////////////////////
 // generate 1D seperable Gaussian kernel
 // kernelSize should be odd number (3, 5, 7, 9, ...) because even function
+// Use computeGaussianKernelSize() to determine required kernel size
 // It returns Float32Array with arraySize
 ///////////////////////////////////////////////////////////////////////////////
 function generateGaussianKernel(sigma, kernelSize)
@@ -49,6 +50,35 @@ function generateGaussianKernel(sigma, kernelSize)
         for(let i = 0; i <= center; ++i)
             kernel[center+i] = kernel[center-i] /= sum;
     }
+    return kernel;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// generate NxN 2D Gaussian kernel for smoothing
+// kernelSize should be odd number (3, 5, 7, 9, ...) because even function
+// It returns Float32Array
+///////////////////////////////////////////////////////////////////////////////
+function generateGaussianKernel2D(sigma, kernelSize)
+{
+    // get 1D separable first;
+    let separableKernel = generateGaussianKernel(sigma, kernelSize);
+    
+    let arraySize = kernelSize * kernelSize;
+    let kernel = new Float32Array(arraySize);
+
+    //let sum = 0;    
+    for(let i = 0, k = 0; i < kernelSize; ++i)
+    {
+        for(let j = 0; j < kernelSize; ++j, ++k)
+        {
+            kernel[k] = separableKernel[i] * separableKernel[j];
+            //sum += kernel[k];
+        }
+    }
+    //log("Sum before: " + sum);
+
     return kernel;
 }
 
@@ -131,17 +161,17 @@ function resizeHalfKernel(kernel, newSize)
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// generate 1D average (box) kernel
+// generate average (box) kernel with sample size
 // It returns Float32Array
 ///////////////////////////////////////////////////////////////////////////////
-function generateAverageKernel(kernelSize=9)
+function generateAverageKernel(sampleSize=9)
 {
-    let k = new Float32Array(kernelSize);
+    let k = new Float32Array(sampleSize);
     k.fill(1);
     // normalize kernel
-    for(let i = 0; i < kernelSize; ++i)
+    for(let i = 0; i < sampleSize; ++i)
     {
-        k[i] /= kernelSize;
+        k[i] /= sampleSize;
     }
     return k;
 }
