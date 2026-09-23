@@ -518,7 +518,11 @@ function drawFloor()
     gl.matrixShadowMap.multiply(gl.matrixLightProjection);
     gl.matrixShadowMap.multiply(gl.matrixLightView);
     gl.uniformMatrix4fv(gl.program.uniform.matrixShadowMap, false, gl.matrixShadowMap.m);
-    
+
+    // transform light pos to eye space
+    let lightPos = gl.matrixView.transform(gl.light.position);
+    gl.uniform4fv(gl.program.uniform.lightPosition, lightPos.toFloat32Array());
+
     // bind texture
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, gl.floor.tex0);
