@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- ==========================================================================
+Testing simple shadow map
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2012-09-19
+UPDATED: 2026-08-28
+===============================================================================
+-->
+
+<head>
+<title>Shadow Map</title>
+<meta name="generator" content="editplus" />
+<meta name="author" content="Song Ho Ahn" />
+<meta name="keywords" content="" />
+<meta name="description" content="" />
+<meta charset="UTF-8">
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    box-sizing:border-box;
+}
+h3 {
+    margin-bottom:5px;
+}
+p {
+    margin:0 0 1em 0;
+}
+.contentblock {
+    display:flex;
+    position:absolute;
+    left:0px;
+    right:0px;
+    top:0px;
+    bottom:0px;
+    padding:10px;
+    line-height:0;
+}
+.mainblock {
+    position:relative;
+    flex:1 1 300px;
+    border:1px solid #ddd;
+}
+.rightblock {
+    flex:0 0 300px;
+    height:100%;
+    overflow:auto;
+    margin-left:10px;
+    line-height:110%;
+}
+#webglView {
+    width:100%;
+    height:100%;
+    touch-action:none; /* prevent browser handle pointer events */
+}
+input[type=range] {
+    vertical-align:middle;
+}
+
+.flexbox {
+    display:flex;
+}
+.flexcol1 {
+    flex:1 1 auto;
+}
+.flexcol2 {
+    flex:0 0 40px;
+}
+
+/* custom input range */
+.slider {
+    -webkit-appearance:none;
+    height:5px;
+    background-color:#e0e0e0;
+    margin:10px 0 20px 0;
+}
+.slider::-webkit-slider-thumb {
+    -webkit-appearance:none;
+    background-color:#07f;
+    width:20px;
+    height:20px;
+    border-radius:50%;
+    cursor:pointer;
+}
+.slider::-moz-range-thumb {
+    background-color:#07f;
+    width:20px;
+    height:20px;
+    border-radius:50%;
+    cursor:pointer;
+}
+.slider::-webkit-slider-thumb:hover, .slider::-webkit-slider-thumb:active {
+    background-color:#05f;
+}
+.slider::-moz-range-thumb:hover, .slider::-moz-range-thumb:active {
+    background-color:#05f;
+}
+
+.noselect {
+    -webkit-touch-callout:none;
+    -webkit-user-select:none;
+    -ms-user-select:none;
+    user-select:none;
+}
+</style>
+
+
+<!-- JavaScript -->
+<script src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script src="files/js/Vectors.js"></script>
+<script src="files/js/Matrices.js"></script>
+<script src="files/js/Quaternion.js"></script>
+<script src="files/js/Light.js"></script>
+<script src="files/js/Material.js"></script>
+<script src="files/js/Timer.js"></script>
+<script src="files/js/FrameRate.js"></script>
+<script src="files/js/MouseState.js"></script>
+<script src="files/js/AnimationMode.js"></script>
+<script src="files/js/OrbitCamera.js"></script>
+<script src="files/js/FrameBuffer.js"></script>
+<script src="files/js/Sphere.js"></script>
+<script src="files/js/LineSegment.js"></script>
+<script src="files/js/Line.js"></script>
+<script src="files/js/Plane.js"></script>
+<script src="files/js/webglUtils.js"></script>
+
+
+
+<script>
+let gl = null;
+
+const FOV_V = 45;
+const CAMERA_DIST = 15;
+const ANIM_DURATION = 500;
+const Z_NEAR = 1;
+const Z_FAR = 1000;
+const MAP_SIZE = 256;       // shadow map dimension
+const LIGHT_R = 6;          // radius
+const LIGHT_A = 90;         // angle in degree
+const LIGHT_H = 4;          // height
+const D2R = Math.PI / 180;
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// main entry point
+///////////////////////////////////////////////////////////////////////////////
+document.addEventListener("DOMContentLoaded", () =>
+{
+    let success = initWebGL("webglView");
+    if(!success)
+        return;
+
+    // init html elements
+    initHtmlElements();
+});
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init WebGL
+///////////////////////////////////////////////////////////////////////////////
+function initWebGL(canvasId)
+{
+    try{
+
+    //Logger.show();
+
+    let canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        let node = canvas.parentNode;
+        let message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        node.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                         message +
+                         "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // get context
+    gl = getContextGL(canvas, {stencil:true});
+    if(!gl)
+    {
+        //log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // remember canvas
+    gl.canvas = canvas;
+
+    // init camera with position and target
+    gl.camera = new OrbitCamera(0, 3, CAMERA_DIST, 0, 0, 0);
+    log("Created an orbit camera.");
+    log(gl.camera);
+
+    // init gl and glsl
+    initGL();
+    initGLSL();
+    log("WebGL is initialized.");
+
+    // init app ===============================================================
+    // create FBOs
+    gl.mapSize = MAP_SIZE;
+    gl.blurEnabled = false;
+    gl.depthOffset = 0.0;
+    gl.fboDepth = new FrameBuffer(gl);
+    gl.fboDepth.init(gl.mapSize, gl.mapSize);
+    log("Depth Buffer Size: " + gl.fboDepth.depthBits + " bits");
+
+    // create a sphere for light position
+    gl.sphere = new Sphere(gl);
+    gl.sphere.setRadius(0.1);
+    log("Light geometry is created");
+    log(gl.sphere);
+
+    // line
+    gl.line = new LineSegment(gl);
+
+    // init light position in world space
+    gl.matrixLight = new Matrix4();
+    gl.lightA = LIGHT_A;
+    gl.lightH = LIGHT_H;
+    updateLightPosition();
+    gl.lightSpinning = false;
+
+    initVBOs();
+    initFloor();
+    initQuad();
+    initPlane();
+
+    // texture
+    gl.tex0 = loadTexture(gl, "files/images/grid512.png", false);
+
+    // init array of pointer objects
+    gl.pointers = [];
+
+    // register event handlers
+    window.addEventListener("resize",  handleResize, false);
+    log("Added window resize envent listener, handleResize().");
+    canvas.addEventListener("click", handleClick, false);
+    log("Added canvas click event listener, handleClick().");
+    canvas.addEventListener("contextmenu", handleContextMenu, false);
+    log("Added canvas contextmenu event listener, handleContextMenu().");
+    canvas.addEventListener("wheel", handleWheel, false);
+    log("Added canvas wheel event listeners, handleWheel()");
+    // canvas pointer events
+    canvas.addEventListener("pointerdown", handlePointerDown, false);
+    log("Added canvas pointerdown event listeners, handlePointerDown()");
+    canvas.addEventListener("pointerup", handlePointerUp, false);
+    log("Added canvas pointerup event listeners, handlePointerUp()");
+    canvas.addEventListener("pointermove", handlePointerMove, false);
+    log("Added canvas pointermove event listeners, handlePointerMove()");
+    canvas.addEventListener("pointercancel", handlePointerCancel, false);
+    log("Added canvas pointercancel event listeners, handlePointerCancel()");
+    canvas.addEventListener("pointerleave", handlePointerLeave, false);
+    log("Added canvas pointerleave event listeners, handlePointerLeave()");
+
+    // ready to start rendering loop
+    startRendering(gl);
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+    }
+
+    return true;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    drawScene();
+    drawShadowMap();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// post frame
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+    if(gl.lightSpinning)
+    {
+        gl.lightA += 0.1;
+        if(gl.lightA > 360) gl.lightA -= 360;
+        let value = gl.lightA.toFixed(1);
+        gl.rangeLightA.value = gl.labelLightA.innerText = value;
+        updateLightPosition();
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw
+///////////////////////////////////////////////////////////////////////////////
+function drawScene()
+{
+    gl.program = gl.shaderPrograms["blinnTex"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // view transform
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+
+    // model transform
+    gl.matrixModel.identity();
+    //gl.matrixModel.translate(0,0,0);
+    //gl.matrixModelView.rotateX(45);
+    //gl.matrixModelView.rotateY(-45);
+
+    // compute modelview transform
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+
+    // compute normal transform
+    gl.matrixNormal = gl.matrixModelView.getRotationMatrix();
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+
+    // compute modelviewprojection transform
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    // transform light pos to eye space
+    let lightPos = gl.matrixView.transform(gl.light.position);
+    gl.uniform4fv(gl.program.uniform.lightPosition, lightPos.toFloat32Array());
+
+    // bind texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.uniform1i(gl.program.uniform.map0, 0);
+
+    // draw cube
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vbo);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, gl.vbo.normalOffset);
+    gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 0, gl.vbo.uvOffset);
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.ibo);
+    gl.drawElements(gl.TRIANGLES, gl.ibo.indexCount, gl.UNSIGNED_BYTE, 0);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    drawFloor();
+    drawLines();
+    drawLight();
+    drawPlane();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw to depth buffer only from light position
+///////////////////////////////////////////////////////////////////////////////
+function drawShadowMap()
+{
+    // make sure shader is loaded before binding fbo
+    gl.program = gl.shaderPrograms["depth"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    gl.fboDepth.bind();
+
+    gl.viewport(0, 0, gl.fboDepth.width, gl.fboDepth.height);
+    gl.clearColor(1, 1, 1, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    //@@gl.uniform1f(gl.program.uniform.linearDepthFactor, gl.linearDepthFactor);
+
+    // modelview matrix from light pos
+    gl.matrixModel.identity();
+    gl.matrixModelView = gl.matrixLightView.clone().multiply(gl.matrixModel);
+
+    // modelviewprojection matrix from light pos
+    gl.matrixModelViewProjection = gl.matrixLightProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    // unbind texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    // draw cube without texture
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vbo);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.ibo);
+    gl.drawElements(gl.TRIANGLES, gl.ibo.indexCount, gl.UNSIGNED_BYTE, 0);
+
+    gl.fboDepth.unbind();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create a 2D quad in [-1, 1]
+// 2---3
+// | \ |
+// 0---1
+///////////////////////////////////////////////////////////////////////////////
+function initQuad()
+{
+    // create vbo for image processing
+    let vertices  = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
+    //let texCoords = new Float32Array([0,1, 1,1, 0,0, 1,0]);
+    let texCoords = new Float32Array([0,0, 1,0, 0,1, 1,1]); // bottom to top
+    gl.vboQuad = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vboQuad);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices.byteLength + texCoords.byteLength, gl.STATIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
+    gl.bufferSubData(gl.ARRAY_BUFFER, vertices.byteLength, texCoords);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create a floor
+///////////////////////////////////////////////////////////////////////////////
+function initFloor()
+{
+    let W = 20;
+    let H = 20;
+    let X = 0;
+    let Y = 0;
+    let Z = 0;
+    let S = 1; // uv scale
+    let T = 1; // uv scale
+
+    let vertices = new Float32Array(4 * 10); // interleave vertex data
+
+    // interleaved triangle strip
+    vertices[0] = X - W*0.5;    vertices[1] = Y;    vertices[2] = Z - H*0.5;
+    vertices[3] = 0;            vertices[4] = 1;    vertices[5] = 0;
+    vertices[6] = 0;            vertices[7] = 0;
+    vertices[8] = 0;            vertices[9] = 0;
+
+    vertices[10] = X - W*0.5;   vertices[11] = Y;   vertices[12] = Z + H*0.5;
+    vertices[13] = 0;           vertices[14] = 1;   vertices[15] = 0;
+    vertices[16] = 0;           vertices[17] = T;
+    vertices[18] = 0;           vertices[19] = 1;
+
+    vertices[20] = X + W*0.5;   vertices[21] = Y;   vertices[22] = Z - H*0.5;
+    vertices[23] = 0;           vertices[24] = 1;   vertices[25] = 0;
+    vertices[26] = S;           vertices[27] = 0;
+    vertices[28] = 1;           vertices[29] = 0;
+
+    vertices[30] = X + W*0.5;   vertices[31] = Y;   vertices[32] = Z + H*0.5;
+    vertices[33] = 0;           vertices[34] = 1;   vertices[35] = 0;
+    vertices[36] = S;           vertices[37] = T;
+    vertices[38] = 1;           vertices[39] = 1;
+
+    // create interleaved vertex buffer
+    gl.floor = {};
+    gl.floor.vboVertex = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.floor.vboVertex);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    gl.floor.matrix = new Matrix4();
+    gl.floor.matrix.translate(0, -1, 0);
+
+    // load texture
+    gl.floor.tex0 = loadTexture(gl, "files/images/marble1.jpg", true);
+    //gl.floor.tex1 = loadTexture(gl, "files/images/gradient.png", false);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw the floor
+///////////////////////////////////////////////////////////////////////////////
+function drawFloor()
+{
+    gl.program = gl.shaderPrograms["floorShadow"];
+    if(!gl.program) return;
+    gl.useProgram(gl.program);
+
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.floor.matrix);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+
+    // compute normal transform
+    gl.matrixNormal = gl.matrixModelView.getRotationMatrix();
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+
+    // compute modelviewprojection transform
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    // compute shadowmap matrix
+    gl.matrixShadowMap = gl.matrixLightNorm.clone();
+    gl.matrixShadowMap.multiply(gl.matrixLightProjection);
+    gl.matrixShadowMap.multiply(gl.matrixLightView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixShadowMap, false, gl.matrixShadowMap.m);
+    
+    // bind texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.floor.tex0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, gl.fboDepth.depth);
+    gl.uniform1i(gl.program.uniform.map0, 0);
+    gl.uniform1i(gl.program.uniform.map1, 1);
+
+    gl.uniform1i(gl.program.uniform.blurEnabled, gl.blurEnabled);
+    gl.uniform1f(gl.program.uniform.depthOffset, gl.depthOffset);
+    gl.uniform2f(gl.program.uniform.shadowDimension, gl.mapSize, gl.mapSize);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.floor.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 40, 0);
+    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 40, 3*4);
+    gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 40, 6*4);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw light
+///////////////////////////////////////////////////////////////////////////////
+function drawLight()
+{
+    // set active program
+    gl.program = gl.shaderPrograms["flat"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    let matrixModel = new Matrix4();
+    matrixModel.setTranslation(gl.light.position.x, gl.light.position.y, gl.light.position.z);
+
+    // set uniforms
+    gl.uniform1i(gl.program.uniform.matrixComputed, false, false);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrixModel.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+
+    // set color
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([1.0, 0.9, 0, 1]));
+
+    // draw a sphere
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.sphere.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.position, 3, gl.FLOAT, false, gl.sphere.stride, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.sphere.vboIndex);
+    gl.drawElements(gl.TRIANGLES, gl.sphere.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw lines from light to cube
+///////////////////////////////////////////////////////////////////////////////
+function drawLines()
+{
+    // set active program
+    gl.program = gl.shaderPrograms["flat"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+
+    // frustum facing +Z axis by default, make the orientation to the camera position
+    let matrixModel = new Matrix4();
+    matrixModel.lookAt(gl.light.position.x,gl.light.position.y,gl.light.position.z, 0,0,0);
+    matrixModel.translate(gl.light.position.x, gl.light.position.y, gl.light.position.z);
+
+    // set uniforms
+    gl.uniform1i(gl.program.uniform.matrixComputed, false, false);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrixModel.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+
+    // set color
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([0.7, 0.7, 0.0, 1]));
+
+    let v1 = gl.frustumVertices[0];
+    let v2 = gl.frustumVertices[1];
+    let v3 = gl.frustumVertices[2];
+    let v4 = gl.frustumVertices[3];
+    let v5 = gl.frustumVertices[4];
+    let v6 = gl.frustumVertices[5];
+    let v7 = gl.frustumVertices[6];
+    let v8 = gl.frustumVertices[7];
+    gl.line.draw(v1.x, v1.y, v1.z,  v2.x, v2.y, v2.z)
+    gl.line.draw(v2.x, v2.y, v2.z,  v3.x, v3.y, v3.z)
+    gl.line.draw(v3.x, v3.y, v3.z,  v4.x, v4.y, v4.z)
+    gl.line.draw(v4.x, v4.y, v4.z,  v1.x, v1.y, v1.z)
+    gl.line.draw(v5.x, v5.y, v5.z,  v6.x, v6.y, v6.z)
+    gl.line.draw(v6.x, v6.y, v6.z,  v7.x, v7.y, v7.z)
+    gl.line.draw(v7.x, v7.y, v7.z,  v8.x, v8.y, v8.z)
+    gl.line.draw(v8.x, v8.y, v8.z,  v5.x, v5.y, v5.z)
+    gl.line.draw(v1.x, v1.y, v1.z,  v5.x, v5.y, v5.z)
+    gl.line.draw(v2.x, v2.y, v2.z,  v6.x, v6.y, v6.z)
+    gl.line.draw(v3.x, v3.y, v3.z,  v7.x, v7.y, v7.z)
+    gl.line.draw(v4.x, v4.y, v4.z,  v8.x, v8.y, v8.z)
+
+    /*
+    let x = gl.light.position.x;
+    let y = gl.light.position.y;
+    let z = gl.light.position.z;
+
+    // compute lines
+    let l1 = new Line(x,y,z, 1,1,1);
+    let l2 = new Line(x,y,z, 1,1,-1);
+    let l3 = new Line(x,y,z, -1,1,1);
+    let l4 = new Line(x,y,z, -1,1,-1);
+    let plane = new Plane(0,1,0,1); // (a,b,c,d)
+    let p1 = plane.intersect(l1);
+    let p2 = plane.intersect(l2);
+    let p3 = plane.intersect(l3);
+    let p4 = plane.intersect(l4);
+    */
+
+
+    // set uniforms
+    matrixModel.identity();
+    gl.uniform1i(gl.program.uniform.matrixComputed, false, false);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrixModel.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([1.0, 1.0, 0.0, 1]));
+    gl.line.draw(gl.light.position.x, gl.light.position.y, gl.light.position.z, 0, 0, 0);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw plane on shadow map frustum
+///////////////////////////////////////////////////////////////////////////////
+function drawPlane()
+{
+    // set active program
+    gl.program = gl.shaderPrograms["flatDepth"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    let p = gl.light.position.clone().subtract(gl.light.position.clone().normalize().scale(gl.nearPlane));
+
+    let matrixModel = new Matrix4();
+    matrixModel.lookAt(gl.light.position.x,gl.light.position.y,gl.light.position.z, 0,1,0);
+    matrixModel.translate(p.x, p.y, p.z);
+
+    // set uniforms
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixView).multiply(matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+    gl.uniform1i(gl.program.uniform.map0, 0);
+
+    // bind texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.fboDepth.depth);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.plane.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 32, 0);
+    gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 32, 6*4);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create a plane on the light frustum
+///////////////////////////////////////////////////////////////////////////////
+function initPlane()
+{
+    let vertices = new Float32Array(4 * 8); // interleave vertex data
+    let s = Math.tan(FOV_V / 2 * Math.PI / 180);
+    //log("Plane Side: " + s);
+
+    // unit plane on XY, interleaved (vx,vy,vz, nx,ny,nz, s,t)
+    vertices[0] = -s;     vertices[1] = s;      vertices[2] = 0;
+    vertices[3] = 0;      vertices[4] = 0;      vertices[5] = 1;
+    vertices[6] = 0;      vertices[7] = 0;
+
+    vertices[8] = -s;     vertices[9] = -s;     vertices[10] = 0;
+    vertices[11] = 0;     vertices[12] = 0;     vertices[13] = 1;
+    vertices[14] = 0;     vertices[15] = 1;
+
+    vertices[16] = s;     vertices[17] = s;     vertices[18] = 0;
+    vertices[19] = 0;     vertices[20] = 0;     vertices[21] = 1;
+    vertices[22] = 1;     vertices[23] = 0;
+
+    vertices[24] = s;     vertices[25] = -s;    vertices[26] = 0;
+    vertices[27] = 0;     vertices[28] = 0;     vertices[29] = 1;
+    vertices[30] = 1;     vertices[31] = 1;
+
+    // create interleaved vertex buffer
+    gl.plane = {};
+    gl.plane.vboVertex = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.plane.vboVertex);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+}
+function updatePlane(w, h)
+{
+    let s = Math.tan(FOV_V / 2 * Math.PI / 180);
+
+    // update only vertex position
+    vertices[0] = w * -0.5; vertices[1] = h * 0.5;  vertices[2] = 0;
+    vertices[8] = w * -0.5; vertices[9] = h * -0.5; vertices[10] = 0;
+    vertices[16] = w * 0.5; vertices[17] = h * 0.5; vertices[18] = 0;
+    vertices[24] = w * 0.5; vertices[25] = h * -0.5;vertices[26] = 0;
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.plane.vboVertex);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the canvas is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize()
+{
+    // resize window to fit to parent
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(FOV_V, gl.canvas.width/gl.canvas.height, Z_NEAR, Z_FAR);
+
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handlers for mouse event
+///////////////////////////////////////////////////////////////////////////////
+function handleClick(e)
+{
+}
+
+function handleContextMenu(e)
+{
+    e.preventDefault(); // disable context menu
+}
+
+function handleWheel(e)
+{
+    const ZOOM_SCALE = 0.1;
+    if(e.deltaY != 0)
+    {
+        let deltaDistance;
+        if(e.deltaY > 0)    // wheel down
+            deltaDistance = ZOOM_SCALE;
+        else                // wheel up
+            deltaDistance = -ZOOM_SCALE;
+
+        if((gl.camera.distance - deltaDistance) < gl.nearPlane)
+        {
+            deltaDistance = gl.camera.distance - gl.nearPlane;
+        }
+        else if((gl.camera.distance - deltaDistance) > gl.farPlane)
+        {
+            deltaDistance = gl.camera.distance - gl.farPlane;
+        }
+
+        gl.camera.moveForward(deltaDistance);
+    }
+
+    e.preventDefault();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handle pointer events: input is PointerEvent object
+///////////////////////////////////////////////////////////////////////////////
+function handlePointerDown(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    let offset = getElementOffset(this);    // get canvas offset
+    gl.pointers.push(copyPointer(pe, offset));
+
+    // remember down pointer and angles when pointer down
+    if(gl.pointers.length == 1)
+    {
+        gl.camera.pointerAngle = gl.camera.angle.clone();
+        gl.pointers.downs = []; // clear
+        gl.pointers.downs.push(copyPointer(pe, offset));
+        // handle right mouse button(0=left, 2=right)
+        gl.pointers[0].button = pe.button;
+    }
+    else if(gl.pointers.length == 2)
+    {
+        // remember second pointer
+        gl.pointers.downs.push(copyPointer(pe, offset));
+    }
+}
+
+function handlePointerUp(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    // get array index matching from gl.pointers
+    let index = gl.pointers.findIndex(pointer => pointer.id == pe.pointerId);
+    if(index >= 0) // found
+    {
+        gl.pointers.splice(index, 1);   // remove it
+        gl.pointers.distance = 0;       // clear
+    }
+}
+
+function handlePointerMove(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    // get the current moving pointer and replace it in the array
+    let offset = getElementOffset(this);    // get canvas offset
+    let index = gl.pointers.findIndex(p => p.id == pe.pointerId);
+    if(index == 0)
+    {
+        // remember delta movement
+        gl.pointers[0].delta = new Vector2((pe.pageX - offset.x) - gl.pointers[0].x, (pe.pageY - offset.y) - gl.pointers[0].y);
+        // update
+        gl.pointers[0].x = pe.pageX - offset.x;
+        gl.pointers[0].y = pe.pageY - offset.y;
+    }
+    else if(index == 1)
+    {
+        // remember delta movement
+        gl.pointers[1].delta = new Vector2((pe.pageX - offset.x) - gl.pointers[1].x, (pe.pageY - offset.y) - gl.pointers[1].y);
+        // update
+        gl.pointers[1].x = pe.pageX - offset.x;
+        gl.pointers[1].y = pe.pageY - offset.y;
+    }
+
+    // if 2 pointers, perform shift/zoom
+    if(gl.pointers.length == 2)
+    {
+        const SCALE_SHIFT = 0.03;
+        const SCALE_ZOOM = 0.01;
+
+        let d1 = gl.pointers[0].delta.normalize();
+        let d2 = gl.pointers[1].delta.normalize();
+        let dir = d1.add(d2).normalize();   // sum vector of 2 delta vectors
+        let v = new Vector2(gl.pointers[1].x - gl.pointers[0].x, gl.pointers[1].y - gl.pointers[0].y);
+        let dist = v.length();              // distance of 2 vectors
+        /*
+        if(d1.dot(d2) > 0.95)
+        {
+            // shift camera if same direction
+            gl.camera.shift(dir.scale(SCALE_SHIFT));
+        }
+        else
+        */
+        {
+            // zoom camera if opposite direction
+            let deltaDistance = 0;
+            if(gl.pointers.distance > 0)
+                deltaDistance = dist - gl.pointers.distance;
+            gl.pointers.distance = dist;     // remember
+            gl.camera.moveForward(deltaDistance * SCALE_ZOOM);
+        }
+    }
+    // if 1 down, perform rotate
+    else if(gl.pointers.length == 1)
+    {
+        const SCALE_ROTATE = 0.2;
+        const SCALE_SHIFT = 0.05;
+
+        // shift if dragging right mouse button
+        if(pe.pointerType == "mouse" && gl.pointers[0].button == 2)
+        {
+            let delta = gl.pointers[0].delta.normalize();
+            delta = delta.scale(SCALE_SHIFT);
+            gl.camera.shift(delta);
+        }
+        else
+        {
+            let angle = new Vector3();
+            angle.x = gl.camera.pointerAngle.x + (gl.pointers[0].y - gl.pointers.downs[0].y) * SCALE_ROTATE;
+            angle.y = gl.camera.pointerAngle.y - (gl.pointers[0].x - gl.pointers.downs[0].x) * SCALE_ROTATE;
+
+            gl.camera.rotateTo(angle);
+        }
+    }
+}
+
+function handlePointerCancel(pe)
+{
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
+}
+
+function handlePointerLeave(pe)
+{
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
+}
+
+function copyPointer(pe, offset={x:0,y:0})
+{
+    // return pointer data
+    return {id:pe.pointerId, x:pe.clientX - offset.x, y:pe.clientY - offset.y};
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL()
+{
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);   // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    //gl.enable(gl.CULL_FACE);    // enable culling backface
+    //gl.cullFace(gl.BACK);
+    gl.enable(gl.BLEND);        // enable blend
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    // default light
+    gl.light = new Light(5, 3, 0, 1);
+    //gl.light.position.normalize(); //@@ fix normalize()
+    gl.light.color.set(1.0, 1.0, 1.0, 1.0);        // light color
+    gl.light.attenuations.set(1, 0, 0); // attenuations (constant, linear, quad)
+    log("    Light Position: " + gl.light.position);
+    log("       Light Color: " + gl.light.color);
+    log("Light Attenuations: " + gl.light.attenuations);
+    log();
+
+    // default material
+    gl.material = new Material(0.7, 0.7, 0.7, 1.0);    // with default diffuse
+    gl.material.ambient.set(0.2, 0.2, 0.2, 1);
+    gl.material.specular.set(1, 1, 1, 1);
+    gl.material.shininess = 128;
+    log("  Material Ambient: " + gl.material.ambient);
+    log("  Material Diffuse: " + gl.material.diffuse);
+    log(" Material Specualr: " + gl.material.specular);
+    log("Material Shininess: " + gl.material.shininess);
+    log();
+
+    // set near and far clip planes
+    gl.nearPlane = Z_NEAR;
+    gl.farPlane = Z_FAR;
+    gl.linearDepthFactor = 1 / (gl.farPlane - gl.nearPlane);    // linear scale factor 
+
+    // init matrices
+    handleResize();
+    gl.matrixModel = new Matrix4();
+    gl.matrixView = gl.camera.matrix;
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+
+    // compute projector matrices
+    let from = new Vector3(0, 0, 0);
+    let to = new Vector3(gl.light.position.x, gl.light.position.y, gl.light.position.z);
+    let up = new Vector3(0, 1, 0);
+    let dist = from.distance(to);
+    log("dist: " + dist);
+
+    buildShadowMapFrustum(FOV_V, 1, 1, 100); // fovY, aspect, near, far
+
+    //gl.matrixLightView = new Matrix4();
+    gl.matrixLightView = Matrix4.lookat(from, to, up);
+    gl.matrixLightView.setTranslation(0, 0, -dist);
+    gl.matrixLightProjection = Matrix4.makePerspective(FOV_V, 1, 1, 100);
+    //gl.matrixLightProjection = Matrix4.makeOrthographic(-10, 10, -10, 10, -1, 100);
+    // normalize matrix for NDC [-1,1] to tex coord [0,1]
+    // x' = 0.5 * x + 0.5
+    gl.matrixLightNorm = new Matrix4(0.5, 0,   0,   0,
+                                     0,   0.5, 0,   0,
+                                     0,   0,   0.5, 0,
+                                     0.5, 0.5, 0.5, 1);
+    gl.matrixShadowMap = gl.matrixLightNorm.clone().multiply(gl.matrixLightProjection);
+    gl.matrixShadowMap.multiply(gl.matrixLightView);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL()
+{
+    // enable all vertexAttribArray
+    initVertexAttribArrays(gl);
+
+    gl.shaderPrograms = {}; // associative array
+
+    // load default shader
+    createShaderProgram(gl, "files/glsl/gles_blinnTex.vert", "files/glsl/gles_blinnTex.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
+        gl.uniform4fv(program.uniform.lightColor, gl.light.getColor());
+        gl.uniform3fv(program.uniform.lightAttenuation, gl.light.getAttenuations());
+        gl.uniform4fv(program.uniform.materialAmbient, gl.material.getAmbient());
+        gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
+        gl.uniform4fv(program.uniform.materialSpecular, gl.material.getSpecular());
+        gl.uniform1f(program.uniform.materialShininess, gl.material.shininess);
+        gl.uniform1i(program.uniform.map0, 0);
+
+        gl.shaderPrograms["blinnTex"] = program;
+    });
+
+    // load floor shader
+    createShaderProgram(gl, "files/glsl/gles_floorShadow.vert", "files/glsl/gles_floorShadow.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
+        gl.uniform4fv(program.uniform.lightColor, gl.light.getColor());
+        gl.uniform3fv(program.uniform.lightAttenuations, gl.light.getAttenuations());
+        gl.uniform4fv(program.uniform.materialAmbient, gl.material.getAmbient());
+        gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
+        gl.uniform4fv(program.uniform.materialSpecular, gl.material.getSpecular());
+        gl.uniform1f(program.uniform.materialShininess, gl.material.shininess);
+        gl.uniform1i(program.uniform.map0, 0);
+        gl.uniform1i(program.uniform.map1, 1);
+        gl.uniform1f(program.uniform.depthOffset, 0.0);
+        gl.uniform1i(program.uniform.blurEnabled, gl.blurEnabled);
+        gl.uniform2f(program.uniform.shadowDimension, gl.mapSize, gl.mapSize);
+
+        gl.shaderPrograms["floorShadow"] = program;
+    });
+
+    // load depth shader
+    createShaderProgram(gl, "files/glsl/gles_depth.vert", "files/glsl/gles_depth.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        //@@gl.uniform1f(program.uniform.linearDepthFactor, gl.linearDepthFactor);
+
+        gl.shaderPrograms["depth"] = program;
+    });
+
+    // load flat shader
+    createShaderProgram(gl, "files/glsl/gles_flat.vert", "files/glsl/gles_flat.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.materialDiffuse, new Float32Array([1,1,1,1]));
+        gl.uniform1i(program.uniform.matrixComputed, false);
+
+        gl.shaderPrograms["flat"] = program;
+    });
+
+    // load flat shader for depth texture
+    createShaderProgram(gl, "files/glsl/gles_flatTexDepth.vert", "files/glsl/gles_flatTexDepth.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        gl.shaderPrograms["flatDepth"] = program;
+    });
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create vbo for a cube
+///////////////////////////////////////////////////////////////////////////////
+function initVBOs()
+{
+    // cube ///////////////////////////////////////////////////////////////////
+    //    v5------v4  Using GL_TRIANGLES per side
+    //   /|      /|
+    //  v1------v0|
+    //  | |     | |
+    //  | |v6---|-|v7
+    //  |/      |/
+    //  v2------v3
+
+    // vertex coords array
+    let vertices = new Float32Array([ 1, 1, 1, -1, 1, 1, -1,-1, 1,  1,-1, 1,    // v0-v1-v2-v3
+                                      1, 1, 1,  1,-1, 1,  1,-1,-1,  1, 1,-1,    // v0-v3-v7-v4
+                                      1, 1, 1,  1, 1,-1, -1, 1,-1, -1, 1, 1,    // v0-v4-v5-v1
+                                     -1, 1, 1, -1, 1,-1, -1,-1,-1, -1,-1, 1,    // v1-v5-v6-v2
+                                     -1,-1,-1,  1,-1,-1,  1,-1, 1, -1,-1, 1,    // v6-v7-v3-v2
+                                     -1, 1,-1,  1, 1,-1,  1,-1,-1, -1,-1,-1]);  // v5-v4-v7-v6
+    // normal array
+    let normals = new Float32Array([ 0, 0, 1,  0, 0, 1,  0, 0, 1,  0, 0, 1,     // v0-v1-v2-v3
+                                     1, 0, 0,  1, 0, 0,  1, 0, 0,  1, 0, 0,     // v0-v3-v7-v4
+                                     0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,     // v0-v4-v5-v1
+                                    -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0,     // v1-v5-v6-v2
+                                     0,-1, 0,  0,-1, 0,  0,-1, 0,  0,-1, 0,     // v6-v7-v3-v2
+                                     0, 0,-1,  0, 0,-1,  0, 0,-1,  0, 0,-1]);   // v5-v4-v7-v6
+    /*
+    // color array (r,g,b,a)
+    let colors = new Float32Array([1,1,1,1,  1,1,0,1,  1,0,0,1,  1,0,1,1,       // v0-v1-v2-v3
+                                   1,1,1,1,  1,0,1,1,  0,0,1,1,  0,1,1,1,       // v0-v3-v7-v4
+                                   1,1,1,1,  0,1,1,1,  0,1,0,1,  1,1,0,1,       // v0-v4-v5-v1
+                                   1,1,0,1,  0,1,0,1,  0,0,0,1,  1,0,0,1,       // v1-v5-v6-v2
+                                   0,0,0,1,  0,0,1,1,  1,0,1,1,  1,0,0,1,       // v6-v7-v3-v2
+                                   0,1,0,1,  0,1,1,1,  0,0,1,1,  0,0,0,1]);     // v5-v4-v7-v6
+    */
+    // st(uv) array (s,t)
+    let uvs = new Float32Array([1,0,  0,0,  0,1,  1,1,                          // v0-v1-v2-v3
+                                0,0,  0,1,  1,1,  1,0,                          // v0-v3-v7-v4
+                                1,1,  1,0,  0,0,  0,1,                          // v0-v4-v5-v1
+                                1,0,  0,0,  0,1,  1,1,                          // v1-v5-v6-v2
+                                0,1,  1,1,  1,0,  0,0,                          // v6-v7-v3-v2
+                                1,0,  0,0,  0,1,  1,1]);                        // v5-v4-v7-v6
+    // index array (2 triangles per side)
+    let indices = new Uint8Array([ 0,  1,  2,    2,  3,  0,                     // v0-v1-v2, v2-v3-v0
+                                   4,  5,  6,    6,  7,  4,                     // v0-v3-v7, v7-v4-v0
+                                   8,  9, 10,   10, 11,  8,                     // v0-v4-v5, v5-v1-v0
+                                  12, 13, 14,   14, 15, 12,                     // v1-v5-v6, v6-v2-v1
+                                  16, 17, 18,   18, 19, 16,                     // v6-v7-v3, v3-v2-v6
+                                  20, 21, 22,   22, 23, 20]);                   // v5-v4-v7, v7-v6-v5
+
+    // create interleaved vertex buffer
+    gl.vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices.byteLength + normals.byteLength + uvs.byteLength, gl.STATIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, vertices);
+    gl.bufferSubData(gl.ARRAY_BUFFER, vertices.byteLength, normals);
+    gl.bufferSubData(gl.ARRAY_BUFFER, vertices.byteLength + normals.byteLength, uvs);
+    gl.vbo.normalOffset = vertices.byteLength;
+    gl.vbo.uvOffset = vertices.byteLength + normals.byteLength;
+
+    gl.ibo = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+    gl.ibo.indexCount = indices.length;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// frustum at origin and facing -Z axis
+function buildShadowMapFrustum(fovY, aspect, near, far)
+{
+    let tangent = Math.tan(fovY / 2 * Math.PI / 180);
+    let nearY = near * tangent;
+    let nearX = nearY * aspect;
+    let farY = far * tangent;
+    let farX = farY * aspect;
+    //log("Near X: " + nearX);
+    
+    // 8 vertices
+    gl.frustumVertices = [];
+    gl.frustumVertices[0] = new Vector3(-nearX,  nearY, -near);
+    gl.frustumVertices[1] = new Vector3( nearX,  nearY, -near);
+    gl.frustumVertices[2] = new Vector3( nearX, -nearY, -near);
+    gl.frustumVertices[3] = new Vector3(-nearX, -nearY, -near);
+    gl.frustumVertices[4] = new Vector3(-farX,  farY, -far);
+    gl.frustumVertices[5] = new Vector3( farX,  farY, -far);
+    gl.frustumVertices[6] = new Vector3( farX, -farY, -far);
+    gl.frustumVertices[7] = new Vector3(-farX, -farY, -far);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// start rendering loop
+///////////////////////////////////////////////////////////////////////////////
+function startRendering(gl)
+{
+    log("\nStarting rendering loop...\n");
+
+    // try to find "requestAnimationFrame" function
+    // if it is not available use setTimeout() instead
+    let requestAnimationFrame = getRequestAnimationFrameFunction(window);
+    let timer = new Timer();
+    gl.fps = new FrameRate("fps");
+    let frameCallback = function()
+    {
+        gl.fps.tick();
+        gl.frameTime = timer.getFrameTime();
+        gl.runTime += gl.frameTime;
+        frame();
+        postFrame();
+        requestAnimationFrame(frameCallback);
+    };
+
+    timer.start();
+    gl.runTime = 0;
+    requestAnimationFrame(frameCallback);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init HTML DOM
+///////////////////////////////////////////////////////////////////////////////
+function initHtmlElements()
+{
+    let comboMapSize = document.form1.comboMapSize;
+    comboMapSize.selectedIndex = 2;
+    comboMapSize.addEventListener("change", e =>
+    {
+        gl.mapSize = parseInt(comboMapSize.value);
+        gl.fboDepth.init(gl.mapSize, gl.mapSize);
+        gl.fboShadow.init(gl.mapSize, gl.mapSize);
+        gl.blurBuffer1.init(gl.mapSize, gl.mapSize);
+        gl.blurBuffer2.init(gl.mapSize, gl.mapSize);
+    });
+
+    gl.labelLightA = document.getElementById("labelLightA");
+    gl.rangeLightA = document.form1.rangeLightA;
+    gl.rangeLightA.value = LIGHT_A;
+    gl.labelLightA.innerText = LIGHT_A;
+    gl.lightA = LIGHT_A;
+    gl.rangeLightA.addEventListener("input", () =>
+    {
+        gl.labelLightA.innerText = gl.rangeLightA.value;
+        // update light position
+        gl.lightA = parseFloat(gl.rangeLightA.value);
+        updateLightPosition();
+    });
+
+    gl.labelLightH = document.getElementById("labelLightH");
+    gl.rangeLightH = document.form1.rangeLightH;
+    gl.rangeLightH.value = LIGHT_H;
+    gl.labelLightH.innerText = LIGHT_H;
+    gl.lightH = LIGHT_H;
+    gl.rangeLightH.addEventListener("input", () =>
+    {
+        gl.labelLightH.innerText = gl.rangeLightH.value;
+        // update light position
+        gl.lightH = parseFloat(gl.rangeLightH.value);
+        updateLightPosition();
+    });
+
+    let buttonAnimate = document.getElementById("buttonAnimate");
+    buttonAnimate.innerText = "Animate Light";
+    buttonAnimate.addEventListener("click", () =>
+    {
+        if(gl.lightSpinning)
+        {
+            buttonAnimate.innerText = "Animate Light";
+            gl.lightSpinning = false;
+        }
+        else
+        {
+            buttonAnimate.innerText = "Stop";
+            gl.lightSpinning = true;
+        }
+    });
+
+    let checkBlur = document.form1.checkBlur;
+    checkBlur.checked = gl.blurEnabled;
+    checkBlur.addEventListener("change", () => gl.blurEnabled = checkBlur.checked);
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+function updateLightPosition()
+{
+    gl.matrixLight.identity();
+    gl.matrixLight.rotateY(gl.lightA * D2R);
+    gl.matrixLight.translate(0, gl.lightH, 0);
+    let pos = gl.matrixLight.transform(new Vector4(0, 0, LIGHT_R, 1));
+    gl.light.setPosition(pos.x, pos.y, pos.z, pos.w);
+
+    let from = new Vector3(0, 0, 0);
+    let up = new Vector3(0, 1, 0);
+    gl.matrixLightView = Matrix4.lookat(from, pos, up);
+    gl.matrixLightView.setTranslation(0, 0, -LIGHT_R);
+    //console.log(pos);
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+function resetCamera()
+{
+    let deltaDistance = gl.camera.distance - CAMERA_DIST;
+    gl.camera.moveForward(deltaDistance, ANIM_DURATION);
+    gl.camera.shiftTo(new Vector3(0,0,0), ANIM_DURATION);
+    gl.camera.rotateTo(new Vector3(0,0,0), ANIM_DURATION);
+}
+
+
+</script>
+
+</head>
+
+<body>
+<div class="contentblock">
+
+<div class="mainblock">
+<canvas id="webglView" width="300" height="300">
+</canvas>
+</div>
+
+<div class="rightblock">
+<h2>
+WebGL: Shadow Map
+</h2>
+
+<form name="form1">
+<label for="comboMapSize">Shadow Map Size: </label>
+<select id="comboMapSize">
+<option value="128">128x128</option>
+<option value="256" >256x256</option>
+<option value="512" selected>512x512</option>
+<option value="1024">1024x1024</option>
+<option value="2048">2048x2048</option>
+<option value="4096">4096x4096</option>
+</select>
+<br>
+<br>
+
+<span>Light Angle:</span>
+<div class="flexbox">
+<input class="flexcol1" type="range" name="rangeLightA" min="0" max="360" step="0.1" value="90"><label class="flexcol2" id="labelLightA" class="col3">90</label>
+</div>
+<br>
+<span>Light Height:</span>
+<div class="flexbox">
+<input class="flexcol1" type="range" name="rangeLightH" min="1" max="10" step="0.1" value="3"><label class="flexcol2" id="labelLightH" class="col3">4</label>
+</div>
+<br>
+<label><input style="margin-bottom:10px;" type="checkbox" name="checkBlur">Soften Shadow</label>
+
+</form>
+
+<br>
+<button type="button" style="width:100%; padding:5px;" id="buttonAnimate">Animate Light</button>
+
+</div>
+<!-- end of right block -->
+
+</div> <!-- end of contentblock -->
+
+</body>
+</html>
