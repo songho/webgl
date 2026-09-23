@@ -1,11 +1,11 @@
 ///////////////////////////////////////////////////////////////////////////////
-// gles_flatTex.frag
-// =================
-// flat shader with texture
+// gles_flatTexDepth.frag
+// ======================
+// flat shading with depth texture
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2012-03-19
-// UPDATED: 2017-09-06
+// UPDATED: 2026-09-07
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -15,13 +15,13 @@
 #endif
 
 // uniforms
-uniform sampler2D map0;         // texture map #1
+//uniform vec4 materialDiffuse;           // material diffuse color
+uniform sampler2D map0;                 // depth texture map
 
-// varying variables
-varying vec2 texCoord0;         // texture coords
+// input varying variables
+varying vec2 texCoord0;
 
 void main(void)
 {
-    vec4 texel = texture2D(map0, texCoord0);
-    gl_FragColor = vec4(texel.rgb, 1.0);
+    gl_FragColor = vec4(texture2D(map0, texCoord0).rrr, 1.0);
 }

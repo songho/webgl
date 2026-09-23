@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
-// gles_floorShadow.vert
-// =====================
-// floor with shadow
+// gles_shadowTex.vert
+// ===================
+// generate shadow only texture
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2012-02-09
@@ -35,8 +35,8 @@ varying vec3 lightVec;
 varying vec3 halfVec;
 varying float lightDistance;
 varying vec2 texCoord0;
-varying vec4 esPosition;    // eye-space vertex position
-varying vec4 lsPosition;    // light-space vertex position, [0, 1]
+varying vec4 shadowCoord;
+varying vec4 esPosition;
 
 void main(void)
 {
@@ -75,6 +75,6 @@ void main(void)
     vec4 viewVec = normalize(-esPosition); // vector from vertex to eye (camera) in eye space
     halfVec = lightVec + viewVec.xyz;
 
-    // vertex position in light space, [0, 1]
-    lsPosition = matrixShadowMap * vec4(vertexPosition, 1.0);
+    // vertex position in light space
+    shadowCoord = matrixShadowMap * vec4(vertexPosition, 1.0);
 }
