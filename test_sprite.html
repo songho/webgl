@@ -446,7 +446,7 @@ function handleWheel(e)
     // negative deltaY = wheel up
     if(e.deltaY != 0)
     {
-        let deltaDistance = -e.deltaY * ZOOM_SCALE;
+        let deltaDistance = e.deltaY * ZOOM_SCALE;
         gl.camera.distance += deltaDistance;
         if(gl.camera.distance < gl.nearPlane)
             gl.camera.distance = gl.nearPlane;

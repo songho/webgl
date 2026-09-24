@@ -2,16 +2,16 @@
 <html lang="en">
 
 <!-- ==========================================================================
-test for Sphere class
+test for Cone class
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
-CREATED: 2011-12-16
-UPDATED: 2024-07-19
+CREATED: 2023-03-17
+UPDATED: 2024-05-04
 ===============================================================================
 -->
 
 <head>
-<title>Sphere</title>
+<title>Test Cone</title>
 <meta charset="utf-8" />
 <meta name="generator" content="editplus" />
 <meta name="author" content="Song Ho Ahn" />
@@ -66,10 +66,7 @@ p {
     line-height:110%;
 }
 
-/* GUI */
-input[type="button"], button {
-    width:100%;
-}
+/* custom input range */
 .slider {
     -webkit-appearance:none;
     height:5px;
@@ -98,6 +95,12 @@ input[type="button"], button {
     background-color:#05f;
 }
 
+.noselect {
+    -webkit-touch-callout:none;
+    -webkit-user-select:none;
+    -ms-user-select:none;
+    user-select:none;
+}
 </style>
 
 
@@ -115,7 +118,7 @@ input[type="button"], button {
 <script src="files/js/AnimationMode.js"></script>
 <script src="files/js/OrbitCamera.js"></script>
 <script src="files/js/ShaderManager.js"></script>
-<script src="files/js/Sphere.js"></script>
+<script src="files/js/Cone.js"></script>
 <script src="files/js/webglUtils.js"></script>
 
 <!-- shader -->
@@ -242,6 +245,14 @@ void main(void)
     float dotNH = max(dot(normal, halfv), 0.0);
     //float dotNH = dot(normal, halfv);
 
+    // compute attenuation factor: 1 / (k0 + k1 * d + k2 * (d*d))
+    /*
+    float attFactor = 1.0;
+    attFactor = 1.0 / (lightAttenuations[0] +
+                       lightAttenuations[1] * lightDistance +
+                       lightAttenuations[2] * lightDistance * lightDistance);
+    */
+
     // start with ambient
     vec3 color = ambient.xyz;
 
@@ -263,16 +274,39 @@ void main(void)
 
     //@@gl_FragColor = vec4(color.rgb, diffuse.a * texel.a);
     gl_FragColor = vec4(color, diffuse.a);  // keep alpha as original material has
+
+    /*
+    if(attFactor > 0.0)
+    {
+        // add diffuse
+        color += dotNL * diffuse.xyz;
+
+        // apply texturing before specular
+        //@@vec4 texel = texture2D(map0, texCoord);
+        //@@color *= texel.rgb;     // modulate
+
+        // add specular
+        if(dotNH > 0.0)
+            color += pow(dotNH, materialShininess) * materialSpecular.xyz * lightColor.xyz;
+
+        // add attenuation
+        if(attFactor < 1.0)
+            color *= attFactor;
+
+        //@@gl_FragColor = vec4(color.rgb, diffuse.a * texel.a);
+        gl_FragColor = vec4(color, diffuse.a);  // keep alpha as original material has
+    }
+    */
 }
 </script>
 
 
+
+
 <script type="text/javascript">
+// <![CDATA[
 
-// global vars
 let gl = null;
-
-// constants
 const CAMERA_DIST = 5;
 const ANIM_DURATION = 500;
 const IMAGE_PATH = "files/images/";
@@ -281,7 +315,7 @@ const IMAGE_PATH = "files/images/";
 ///////////////////////////////////////////////////////////////////////////////
 // main entry point
 ///////////////////////////////////////////////////////////////////////////////
-document.addEventListener("DOMContentLoaded", () =>
+document.addEventListener("DOMContentLoaded", function()
 {
     let success = initWebGL("webglView");
     if(!success)
@@ -335,7 +369,7 @@ function initWebGL(canvasId)
 
     // init gl and glsl
     initGL(gl);
-    initGLSL(gl);
+    initGLSL();
     log("WebGL is initialized.");
 
     gl.nearPlane = 0.1;
@@ -348,11 +382,11 @@ function initWebGL(canvasId)
     // init array of pointer objects
     gl.pointers = [];
 
-    // create a sphere, param: (gl, radius=1, sectors=36, stacks=18, smooth=false)
-    gl.sphere = new Sphere(gl, 1.0, 36, 18, false);
-    //gl.sphere = new Sphere(gl, 1.0, 180, 90, false); // max: 64440 vertices < 65535 
-    printSphere();
-    log(gl.sphere);
+    // create cone, param: (gl, baseR=1, height=1, sectors=36, stacks=1, smooth=true)
+    //gl.cone = new Cone(gl);
+    gl.cone = new Cone(gl, 1.0, 2, 36, 1, false);
+    printCone();
+    log(gl.cone);
 
     // load default texture
     gl.tex0 = loadTexture(gl, IMAGE_PATH + "grid512.png", true);
@@ -427,18 +461,18 @@ function frame()
         gl.uniform1i(gl.program.uniform.textureEnabled, 0);
     }
 
-    // draw sphere with interleaved mode
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.sphere.vboVertex);
-    gl.vertexAttribPointer(gl.program.attribute.position, 3, gl.FLOAT, false, gl.sphere.stride, 0);
-    gl.vertexAttribPointer(gl.program.attribute.normal, 3, gl.FLOAT, false, gl.sphere.stride, 12);
-    gl.vertexAttribPointer(gl.program.attribute.texCoord0, 2, gl.FLOAT, false, gl.sphere.stride, 24);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.sphere.vboIndex);
+    // draw cone with interleaved mode
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.cone.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.position, 3, gl.FLOAT, false, gl.cone.stride, 0);
+    gl.vertexAttribPointer(gl.program.attribute.normal, 3, gl.FLOAT, false, gl.cone.stride, 12);
+    gl.vertexAttribPointer(gl.program.attribute.texCoord0, 2, gl.FLOAT, false, gl.cone.stride, 24);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.cone.vboIndex);
     gl.uniform4fv(gl.program.uniform.lightColor, gl.light.getColor());
-    gl.drawElements(gl.TRIANGLES, gl.sphere.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+    gl.drawElements(gl.TRIANGLES, gl.cone.getIndexCount(), gl.UNSIGNED_SHORT, 0);
     if(gl.wireframeEnabled)
     {
         gl.uniform4fv(gl.program.uniform.lightColor, new Float32Array([0, 0, 0, 1]));
-        gl.drawElements(gl.LINE_STRIP, gl.sphere.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+        gl.drawElements(gl.LINE_STRIP, gl.cone.getIndexCount(), gl.UNSIGNED_SHORT, 0);
     }
 }
 
@@ -490,8 +524,7 @@ function handleWheel(e)
     const ZOOM_SCALE = 0.1;
     if(e.deltaY != 0)
     {
-        let deltaDistance = 0;
-        //console.log(e.deltaY);
+        let deltaDistance;
         if(e.deltaY > 0)    // wheel down
             deltaDistance = -ZOOM_SCALE;
         else                // wheel up
@@ -588,13 +621,14 @@ function handlePointerMove(pe)
         let dir = d1.add(d2).normalize();   // sum vector of 2 delta vectors
         let v = new Vector2(gl.pointers[1].x - gl.pointers[0].x, gl.pointers[1].y - gl.pointers[0].y);
         let dist = v.length();              // distance of 2 vectors
-
+        /*
         if(d1.dot(d2) > 0.95)
         {
             // shift camera if same direction
             gl.camera.shift(dir.scale(SCALE_SHIFT));
         }
         else
+        */
         {
             // zoom camera if opposite direction
             let deltaDistance = 0;
@@ -672,8 +706,8 @@ function initGL(gl)
 
     // default material
     gl.material = new Material(0.7, 0.7, 0.7, 1.0); // with default diffuse
-    gl.material.ambient.set(0.25, 0.25, 0.25, 1.0);
-    gl.material.specular.set(0.2, 0.2, 0.2, 1);
+    gl.material.ambient.set(0.2, 0.2, 0.2, 1.0);
+    gl.material.specular.set(0.0, 0.0, 0.0, 1);
     gl.material.shininess = 128;
     log("  Material Ambient: " + gl.material.ambient);
     log("  Material Diffuse: " + gl.material.diffuse);
@@ -694,7 +728,7 @@ function initGL(gl)
 ///////////////////////////////////////////////////////////////////////////////
 // init GLSL (shaders and programs)
 ///////////////////////////////////////////////////////////////////////////////
-function initGLSL(gl)
+function initGLSL()
 {
     // create shader objects
     let vertexShader = loadShaderById(gl, "vert-simple");
@@ -825,23 +859,24 @@ function startRendering(gl)
 ///////////////////////////////////////////////////////////////////////////////
 function initHtmlElements()
 {
-    let checkNormal = document.getElementById("checkNormal");
-    checkNormal.checked = false;
-    checkNormal.addEventListener("click", event =>
+    let rangeBase = document.getElementById("rangeBase");
+    let labelBase = document.getElementById("labelBase");
+    rangeBase.value = 1;
+    rangeBase.addEventListener("input", event =>
     {
-        gl.sphere.reverseNormals();
+        labelBase.innerHTML = rangeBase.value;
+        gl.cone.setBaseRadius(parseFloat(rangeBase.value));
+        printCone();
     });
 
-    let rangeRadius = document.getElementById("rangeRadius");
-    let labelRadius = document.getElementById("labelRadius");
-    rangeRadius.value = 1;
-    rangeRadius.addEventListener("input", event =>
+    let rangeHeight = document.getElementById("rangeHeight");
+    let labelHeight = document.getElementById("labelHeight");
+    rangeHeight.value = 2;
+    rangeHeight.addEventListener("input", event =>
     {
-        labelRadius.innerHTML = rangeRadius.value;
-        gl.sphere.setRadius(parseFloat(rangeRadius.value));
-        if(checkNormal.checked)
-            gl.sphere.reverseNormals();
-        printSphere();
+        labelHeight.innerHTML = rangeHeight.value;
+        gl.cone.setHeight(parseFloat(rangeHeight.value));
+        printCone();
     });
 
     let rangeSector = document.getElementById("rangeSector");
@@ -850,22 +885,18 @@ function initHtmlElements()
     rangeSector.addEventListener("input", event =>
     {
         labelSector.innerHTML = rangeSector.value;
-        gl.sphere.setSectorCount(parseFloat(rangeSector.value));
-        if(checkNormal.checked)
-            gl.sphere.reverseNormals();
-        printSphere();
+        gl.cone.setSectorCount(parseFloat(rangeSector.value));
+        printCone();
     });
 
     let rangeStack = document.getElementById("rangeStack");
     let labelStack = document.getElementById("labelStack");
-    rangeStack.value = 18;
+    rangeStack.value = 1;
     rangeStack.addEventListener("input", event =>
     {
         labelStack.innerHTML = rangeStack.value;
-        gl.sphere.setStackCount(parseFloat(rangeStack.value));
-        if(checkNormal.checked)
-            gl.sphere.reverseNormals();
-        printSphere();
+        gl.cone.setStackCount(parseFloat(rangeStack.value));
+        printCone();
     });
 
     let checkTexture = document.getElementById("checkTexture");
@@ -886,29 +917,28 @@ function initHtmlElements()
     checkSmooth.checked = false;
     checkSmooth.addEventListener("click", event =>
     {
-        gl.sphere.setSmooth(checkSmooth.checked);
-        if(checkNormal.checked)
-            gl.sphere.reverseNormals();
-        printSphere();
+        gl.cone.setSmooth(checkSmooth.checked);
+        printCone();
     });
 
     let buttonReset = document.getElementById("buttonReset");
     buttonReset.addEventListener("click", event =>
     {
-        gl.sphere.set(1, 36, 18, false);
-        rangeRadius.value = 1;
-        labelRadius.innerHTML = 1;
+        gl.cone.set(1, 2, 36, 1, false);
+        rangeBase.value = 1;
+        labelBase.innerHTML = 1;
+        rangeHeight.value = 2;
+        labelHeight.innerHTML = 2;
         rangeSector.value = 36;
         labelSector.innerHTML = 36;
-        rangeStack.value = 18;
-        labelStack.innerHTML = 18;
+        rangeStack.value = 1;
+        labelStack.innerHTML = 1;
         checkTexture.checked = false;
         checkWireframe.checked = false;
         checkSmooth.checked = false;
-        checkNormal.checked = false;
         gl.textureEnabled = false;
         gl.wireframeEnabled = false;
-        printSphere();
+        printCone();
         resetCamera();
     });
 }
@@ -916,15 +946,16 @@ function initHtmlElements()
 
 
 ///////////////////////////////////////////////////////////////////////////////
-function printSphere()
+function printCone()
 {
     let info = document.getElementById("info");
     if(info)
     {
-        info.innerHTML = gl.sphere.toString();
+        info.innerHTML = gl.cone.toString();
     }
 }
 
+// ]]>
 </script>
 </head>
 
@@ -941,13 +972,21 @@ function printSphere()
 
 <div class="rightblock">
 <h2>
-Sphere
+Cone
 </h2>
 <div>
-<span>Radius</span>
+<span>Base Radius</span>
 <br>
 <div style="display:flex;align-items:center;">
-<input id="rangeRadius" class="slider" type="range" min="0" max="5" step="0.1" value="1" style="flex:1;"><label id="labelRadius" style="flex:0 0 2em;margin-left:5px;">1</label>
+<input id="rangeBase" class="slider" type="range" min="0" max="5" step="0.1" value="1" style="flex:1;"><label id="labelBase" style="flex:0 0 2em;margin-left:5px;">1</label>
+</div>
+</div>
+
+<div>
+<span>Height</span>
+<br>
+<div style="display:flex;align-items:center;">
+<input id="rangeHeight" class="slider" type="range" min="0" max="5" step="0.1" value="2" style="flex:1;"><label id="labelHeight" style="flex:0 0 2em;margin-left:5px;">2</label>
 </div>
 </div>
 
@@ -963,21 +1002,19 @@ Sphere
 <span>Stack Count</span>
 <br>
 <div style="display:flex;align-items:center;">
-<input id="rangeStack" class="slider" type="range" min="2" max="100" step="1" value="1" style="flex:1;"><label id="labelStack" style="flex:0 0 2em;margin-left:5px;">18</label>
+<input id="rangeStack" class="slider" type="range" min="1" max="50" step="1" value="1" style="flex:1;"><label id="labelStack" style="flex:0 0 2em;margin-left:5px;">1</label>
 </div>
 </div>
 
 <div>
-<label><input style="margin-bottom:20px;" type="checkbox" id="checkTexture">Show Texture</label>
+<label><input style="margin-bottom:10px;" type="checkbox" id="checkTexture">Show Texture</label>
 <br>
-<label><input style="margin-bottom:20px;" type="checkbox" id="checkWireframe">Show Wireframe</label>
+<label><input style="margin-bottom:10px;" type="checkbox" id="checkWireframe">Show Wireframe</label>
 <br>
-<label><input style="margin-bottom:20px;" type="checkbox" id="checkSmooth">Smooth Shading</label>
-<br>
-<label><input style="margin-bottom:20px;" type="checkbox" id="checkNormal">Reverse Normals</label>
+<label><input style="margin-bottom:10px;" type="checkbox" id="checkSmooth">Smooth Shading</label>
 </div>
 
-<button type="reset" id="buttonReset">Reset</button>
+<button type="reset" id="buttonReset" style="width:100%; padding:5px;">Reset</button>
 
 </div>
 <!-- end of rightblock -->

@@ -514,9 +514,9 @@ function handleWheel(e)
     {
         let deltaDistance = 0;
         if(e.deltaY > 0)    // wheel down
-            deltaDistance = ZOOM_SCALE;
-        else                // wheel up
             deltaDistance = -ZOOM_SCALE;
+        else                // wheel up
+            deltaDistance = ZOOM_SCALE;
 
         if((gl.camera.distance - deltaDistance) < gl.nearPlane)
         {
@@ -1054,7 +1054,7 @@ Torus Knot
 <span>Sector Count</span>
 <br>
 <div style="display:flex;align-items:center;">
-<input id="rangeSector" class="slider" type="range" min="18" max="500" step="1" value="90" style="flex:1;"><label id="labelSector" style="flex:0 0 2em;margin-left:5px;">90</label>
+<input id="rangeSector" class="slider" type="range" min="18" max="300" step="1" value="90" style="flex:1;"><label id="labelSector" style="flex:0 0 2em;margin-left:5px;">90</label>
 </div>
 </div>
 
