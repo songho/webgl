@@ -8,7 +8,7 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 5. [Lighting](https://www.songho.ca/webgl/webgl_light.html): Ambient, Diffuse, Specular & Attenuation
 6. [Drawing Cube](https://www.songho.ca/webgl/webgl_cube.html): Draw a rotating cube with a texture map and vertex colors
 7. [Drawing Sphere](https://www.songho.ca/webgl/webgl_sphere.html): Draw a sphere with a texture map
-8. [Drawing CubeSphere](https://www.songho.ca/opengl/gl_sphere.html#webgl_cubesphere): Draw a cube sphere
+8. [Drawing CubeSphere](https://www.songho.ca/webgl/webgl_sphere.html#cubesphere): Draw a cube sphere
 9. [Drawing Cylinder](https://www.songho.ca/opengl/gl_cylinder.html#webgl_cylinder): Draw a cylinder or prism
 10. [Drawing Cone](https://www.songho.ca/opengl/gl_cone.html#webgl_cone): Draw a cone
 11. [Drawing Torus](https://www.songho.ca/opengl/gl_torus.html#webgl_torus): Draw a torus
