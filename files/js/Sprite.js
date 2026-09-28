@@ -6,15 +6,23 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2012-03-06
-// UPDATED: 2021-07-09
+// UPDATED: 2026-09-28
 ///////////////////////////////////////////////////////////////////////////////
 
 let Sprite = function(gl)
 {
+    this.width = 1;
+    this.height = 1;
+    this.texId = null;
+    this.texCoords = new Vector4(0,0, 1,1); // s1,t1, s2,t2
+    this.color = new Vector4(1, 1, 1, 1);
+    this.matrix = new Matrix4();
+    this.matrix.identity();
     this.gl = gl;
     if(gl)
     {
         this.vboVertex = gl.createBuffer();
+        this.setSize(this.width, this.height);
     }
     else
     {
@@ -22,13 +30,6 @@ let Sprite = function(gl)
         log("[WARNING] Sprite.contructor requires GL context as a param.");
     }
 
-    this.width = 0;
-    this.height = 0;
-    this.texId = null;
-    this.texCoords = new Vector4(0,0, 1,1); // s1,t1, s2,t2
-    this.color = new Vector4(1, 1, 1, 1);
-    this.matrix = new Matrix4();
-    this.matrix.identity();
 };
 
 Sprite.prototype =
@@ -49,8 +50,8 @@ Sprite.prototype =
         if(!this.vboVertex)
             this.vboVertex = gl.createBuffer();
 
-        this.width = w || 0;
-        this.height = h || 0;
+        this.width = w || 1;
+        this.height = h || 1;
 
         let vertices = new Float32Array(4 * 5);
 
