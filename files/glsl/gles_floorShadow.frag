@@ -5,7 +5,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2012-02-09
-// UPDATED: 2026-09-07
+// UPDATED: 2026-09-29
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -39,14 +39,15 @@ varying vec4 lsPosition;
 
 // constants
 const vec3 SHADOW_COLOR = vec3(0.0, 0.0, 0.0);
-const float SHADOW_ALPHA = 0.5;     // default blend alpha
+const float SHADOW_ALPHA = 0.5;     // default shadow blend weight
 const int HALF_KERNEL = 2;          // half range of kernel
 const int KERNEL_COUNT = 25;        // total number of samples in kernel
+const float SPREAD = 1.0;           // texel sampling radius
 
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// generate pseudo random number between 0 and 1 from (x,y) 2D screen coordinate
+// generate pseudo random number between 0 and 1 from 2D screen coordinate
 ///////////////////////////////////////////////////////////////////////////////
 float rand(vec2 coord)
 {
@@ -56,16 +57,54 @@ float rand(vec2 coord)
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// smooth shadow blend factor using box filter
-///////////////////////////////////////////////////////////////////////////////
+// simple shadow test
+// It is in shadow if depth value of current fragment in light-space is greater
+// than shadowmap value, otherwise return 0 (no shadow)
+/////////////////////////////////////////////////////////////////////////////// 
 float computeShadowFactor(vec3 shadowCoord)
 {
-    if(!blurEnabled)
-        return SHADOW_ALPHA;
+    float depth = texture2D(map1, shadowCoord.xy).r;
+    if((shadowCoord.z - depthOffset) > depth)
+            return SHADOW_ALPHA;    // in shadow
+        else
+            return 0.0;             // in lit
+}
 
-    //float randX = rand(gl_FragCoord.xy);
-    //float randY = rand(gl_FragCoord.xy * 2.718); // offset seed
-    //vec2 jitter = vec2(randX, randY) - 0.5;
+
+
+///////////////////////////////////////////////////////////////////////////////
+// smooth shadow factor using NxN box filter
+///////////////////////////////////////////////////////////////////////////////
+float computeShadowFactorBlur(vec3 shadowCoord)
+{
+    float depth;
+    vec2 offset;
+    float sum = 0.0;
+    for(int i = -HALF_KERNEL; i <= HALF_KERNEL; ++i)
+    {
+        for(int j = -HALF_KERNEL; j <= HALF_KERNEL; ++j)
+        {
+            offset = vec2(float(i), float(j)) * SPREAD / shadowDimension;
+            depth = texture2D(map1, shadowCoord.xy + offset).r;
+            // accumulate if it is in shadow
+            if((shadowCoord.z - depthOffset) > depth)
+                sum += 1.0;
+        }
+    }
+    return SHADOW_ALPHA * (sum / float(KERNEL_COUNT));
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// smooth shadow factor using screen-space random noise
+///////////////////////////////////////////////////////////////////////////////
+float computeShadowFactorNoise(vec3 shadowCoord)
+{
+    // generate random white noise in screen space
+    float randX = rand(gl_FragCoord.xy);
+    float randY = rand(gl_FragCoord.xy * 2.718); // offset seed
+    vec2 noise = vec2(randX, randY) - 0.5;       // shift to [-0.5, 0.5]
 
     float sum = 0.0;
     vec2 offset;
@@ -74,7 +113,7 @@ float computeShadowFactor(vec3 shadowCoord)
     {
         for(int j = -HALF_KERNEL; j <= HALF_KERNEL; ++j)
         {
-            offset = vec2(float(i), float(j)) * 1.0 / shadowDimension;
+            offset = (vec2(float(i), float(j)) + noise) * SPREAD / shadowDimension;
             depth = texture2D(map1, shadowCoord.xy + offset).r;
             // accumulate if it is in shadow
             if((shadowCoord.z - depthOffset) > depth)
@@ -116,42 +155,39 @@ void main(void)
     // start with ambient
     vec3 color = ambient.xyz;
 
+    // compute shadow factor, 0 means lit (no shadow)
+    vec3 shadowCoord = lsPosition.xyz / lsPosition.w;
+    shadowCoord = clamp(shadowCoord, 0.0, 1.0);
+    float shadowFactor;
+    if(blurEnabled)
+        shadowFactor = computeShadowFactorBlur(shadowCoord);
+        //shadowFactor = computeShadowFactorNoise(shadowCoord);
+    else
+        shadowFactor = computeShadowFactor(shadowCoord);
+
     // compute diffuse factor using Lambert cosine law
     float dotNL = max(dot(normal, light), 0.0);
 
     // add diffuse
     color += dotNL * diffuse.xyz;
 
-    // apply texture before specular
+    // blend shadow
+    color = mix(color, SHADOW_COLOR, shadowFactor);
+
+    // apply texture
     vec4 texel = texture2D(map0, texCoord0);
     color *= texel.rgb;
 
-    vec3 shadowCoord = lsPosition.xyz / lsPosition.w;
-    shadowCoord = clamp(shadowCoord, 0.0, 1.0);
-    //float shadowDepth = convertRgbToDepth(texture2D(map1, shadowCoord.xy).rgb);
-    vec4 shadowmap = texture2D(map1, shadowCoord.xy);
-    if((shadowCoord.z - depthOffset) > shadowmap.r)
-    {
-        // depth value of current fragment in light-space is greater than shadowmap
-        //color = vec3(computeShadowFactor(shadowCoord));
-        color = mix(color, SHADOW_COLOR, computeShadowFactor(shadowCoord));
-    }
-    else
-    {
-        // add spacular
-        float dotNH = max(dot(normal, halfv), 0.0);
-        color += pow(dotNH, materialShininess) * materialSpecular.xyz * lightColor.xyz;
+    // add spacular
+    float dotNH = max(dot(normal, halfv), 0.0);
+    color += pow(1.0 - shadowFactor, 5.0) * pow(dotNH, materialShininess) * materialSpecular.xyz * lightColor.xyz;
 
-        /*
-        // compute attenuation factor for positional light: 1 / (k0 + k1 * d + k2 * (d*d))
-        float attFactor = 1.0 / dot(lightAttenuations, vec3(1.0, lightDistance, lightDistance * lightDistance));
+    // compute attenuation factor for positional light: 1 / (k0 + k1 * d + k2 * (d*d))
+    //float attFactor = 1.0 / dot(lightAttenuations, vec3(1.0, lightDistance, lightDistance * lightDistance));
 
-        // add attenuation
-        color *= attFactor;
-        */
-    }
+    // add attenuation
+    //color *= attFactor;
 
     // set frag color
-    //gl_FragColor = vec4(color, diffuse.a * texel.a);
-    gl_FragColor = vec4(color, diffuse.a);
+    gl_FragColor = vec4(color, diffuse.a * texel.a);
 }
