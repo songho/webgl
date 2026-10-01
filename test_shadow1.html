@@ -129,6 +129,7 @@ input[type=range] {
 <script src="files/js/LineSegment.js"></script>
 <script src="files/js/Line.js"></script>
 <script src="files/js/Plane.js"></script>
+<script src="files/js/Sprite.js"></script>
 <script src="files/js/webglUtils.js"></script>
 
 
@@ -217,13 +218,16 @@ function initWebGL(canvasId)
     gl.depthOffset = 0.0;
     gl.fboDepth = new FrameBuffer(gl);
     gl.fboDepth.init(gl.mapSize, gl.mapSize);
-    log("Depth Buffer Size: " + gl.fboDepth.depthBits + " bits");
+    log("Depth Frame Buffer Size: " + gl.fboDepth.depthBits + " bits");
 
-    // create a sphere for light position
-    gl.sphere = new Sphere(gl);
-    gl.sphere.setRadius(0.1);
-    log("Light geometry is created");
-    log(gl.sphere);
+    // create a sprite for light position
+    gl.spriteLight = new Sprite(gl);
+    gl.spriteLight.setSize(1, 1);
+    gl.spriteLight.setColor(1.0, 0.8, 0.0, 1.0);
+    gl.texLight = loadTexture(gl, "files/images/light.png", false);
+    gl.spriteLight.setTexture(gl.texLight);
+    log("Light sprite is created");
+    log(gl.spriteLight);
 
     // line
     gl.line = new LineSegment(gl);
@@ -298,7 +302,7 @@ function postFrame()
 {
     if(gl.lightSpinning)
     {
-        gl.lightA += 0.1;
+        gl.lightA += gl.frameTime * 0.005;
         if(gl.lightA > 360) gl.lightA -= 360;
         let value = gl.lightA.toFixed(1);
         gl.rangeLightA.value = gl.labelLightA.innerText = value;
@@ -368,8 +372,8 @@ function drawScene()
 
     drawFloor();
     drawLines();
-    drawLight();
     drawPlane();
+    drawLight();
 }
 
 
@@ -488,7 +492,6 @@ function initFloor()
 
     // load texture
     gl.floor.tex0 = loadTexture(gl, "files/images/marble1.jpg", true);
-    //gl.floor.tex1 = loadTexture(gl, "files/images/gradient.png", false);
 }
 
 
@@ -551,28 +554,32 @@ function drawFloor()
 function drawLight()
 {
     // set active program
-    gl.program = gl.shaderPrograms["flat"];
+    gl.program = gl.shaderPrograms["sprite"];
     if(!gl.program)
         return;
     gl.useProgram(gl.program);
 
-    let matrixModel = new Matrix4();
-    matrixModel.setTranslation(gl.light.position.x, gl.light.position.y, gl.light.position.z);
+    gl.spriteLight.setPosition(gl.light.position.x, gl.light.position.y, gl.light.position.z);
 
     // set uniforms
     gl.uniform1i(gl.program.uniform.matrixComputed, false, false);
-    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, matrixModel.m);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, gl.spriteLight.matrix.m);
     gl.uniformMatrix4fv(gl.program.uniform.matrixView, false, gl.matrixView.m);
     gl.uniformMatrix4fv(gl.program.uniform.matrixProjection, false, gl.matrixProjection.m);
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.spriteLight.color.toFloat32Array());
 
-    // set color
-    gl.uniform4fv(gl.program.uniform.materialDiffuse, new Float32Array([1.0, 0.9, 0, 1]));
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.spriteLight.texId);
 
-    // draw a sphere
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.sphere.vboVertex);
-    gl.vertexAttribPointer(gl.program.attribute.position, 3, gl.FLOAT, false, gl.sphere.stride, 0);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.sphere.vboIndex);
-    gl.drawElements(gl.TRIANGLES, gl.sphere.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND);
+    gl.disable(gl.DEPTH_TEST);
+
+    // draw sprite
+    gl.spriteLight.draw();
+    
+    gl.disable(gl.BLEND);
+    gl.enable(gl.DEPTH_TEST);
 }
 
 
@@ -988,7 +995,6 @@ function initGL()
 
     buildShadowMapFrustum(FOV_V, 1, 1, 100); // fovY, aspect, near, far
 
-    //gl.matrixLightView = new Matrix4();
     gl.matrixLightView = Matrix4.lookat(from, to, up);
     gl.matrixLightView.setTranslation(0, 0, -dist);
     gl.matrixLightProjection = Matrix4.makePerspective(FOV_V, 1, 1, 100);
@@ -1075,6 +1081,18 @@ function initGLSL()
         gl.uniform1i(program.uniform.matrixComputed, false);
 
         gl.shaderPrograms["flat"] = program;
+    });
+
+    // load sprite shader
+    createShaderProgram(gl, "files/glsl/gles_sprite.vert", "files/glsl/gles_sprite.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.materialDiffuse, new Float32Array([1,1,1,1]));
+        gl.uniform1i(program.uniform.matrixComputed, false);
+
+        gl.shaderPrograms["sprite"] = program;
     });
 
     // load flat shader for depth texture
@@ -1242,9 +1260,6 @@ function initHtmlElements()
     {
         gl.mapSize = parseInt(comboMapSize.value);
         gl.fboDepth.init(gl.mapSize, gl.mapSize);
-        gl.fboShadow.init(gl.mapSize, gl.mapSize);
-        gl.blurBuffer1.init(gl.mapSize, gl.mapSize);
-        gl.blurBuffer2.init(gl.mapSize, gl.mapSize);
     });
 
     gl.labelLightA = document.getElementById("labelLightA");
