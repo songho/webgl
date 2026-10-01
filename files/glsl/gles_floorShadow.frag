@@ -5,7 +5,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2012-02-09
-// UPDATED: 2026-09-29
+// UPDATED: 2026-09-30
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -97,9 +97,29 @@ float computeShadowFactorBlur(vec3 shadowCoord)
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// smooth shadow factor using screen-space random noise
+// compute shadow factor using screen-space random noise
 ///////////////////////////////////////////////////////////////////////////////
 float computeShadowFactorNoise(vec3 shadowCoord)
+{
+    // generate random white noise in screen space
+    float randX = rand(gl_FragCoord.xy);
+    float randY = rand(gl_FragCoord.xy * 2.718); // offset seed
+    vec2 noise = vec2(randX, randY) - 0.5;       // shift to [-0.5, 0.5]
+
+    vec2 offset = (noise) * SPREAD / shadowDimension;
+    float depth = texture2D(map1, shadowCoord.xy + offset).r;
+    if((shadowCoord.z - depthOffset) > depth)
+        return SHADOW_ALPHA;
+    else
+        return 0.0;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// smooth shadow factor using screen-space random noise and box filter
+///////////////////////////////////////////////////////////////////////////////
+float computeShadowFactorNoiseBlur(vec3 shadowCoord)
 {
     // generate random white noise in screen space
     float randX = rand(gl_FragCoord.xy);
@@ -161,6 +181,7 @@ void main(void)
     float shadowFactor;
     if(blurEnabled)
         shadowFactor = computeShadowFactorBlur(shadowCoord);
+        //shadowFactor = computeShadowFactorNoiseBlur(shadowCoord);
         //shadowFactor = computeShadowFactorNoise(shadowCoord);
     else
         shadowFactor = computeShadowFactor(shadowCoord);
