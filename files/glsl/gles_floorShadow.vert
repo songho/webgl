@@ -5,7 +5,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2012-02-09
-// UPDATED: 2026-09-07
+// UPDATED: 2026-10-04
 ///////////////////////////////////////////////////////////////////////////////
 
 // input vertex attributes
@@ -15,6 +15,7 @@ attribute vec2 vertexTexCoord0;     // vertex tex coord
 
 // uniforms
 uniform mat4 matrixNormal;
+uniform mat4 matrixModel;
 uniform mat4 matrixView;
 uniform mat4 matrixModelView;
 uniform mat4 matrixModelViewProjection;
@@ -75,6 +76,7 @@ void main(void)
     vec4 viewVec = normalize(-esPosition); // vector from vertex to eye (camera) in eye space
     halfVec = lightVec + viewVec.xyz;
 
-    // vertex position in light space, [0, 1]
-    lsPosition = matrixShadowMap * vec4(vertexPosition, 1.0);
+    // vertex position from world space to light space, [0, 1]
+    vec4 wsPosition = matrixModel * vec4(vertexPosition, 1.0);
+    lsPosition = matrixShadowMap * wsPosition;
 }
