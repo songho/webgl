@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html>
+
+<!-- ==========================================================================
+Testing shadowmap
+
+ AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
+CREATED: 2012-09-19
+UPDATED: 2026-10-03
+===============================================================================
+-->
+
+<head>
+<title>ShadowMap2</title>
+<meta name="generator" content="notepad++">
+<meta name="author" content="Song Ho Ahn">
+<meta name="keywords" content="">
+<meta name="description" content="">
+<meta charset="UTF-8">
+
+<!-- CSS -->
+<style type="text/css">
+body {
+    margin:0;
+    padding:0;
+    font-family:arial,helvetica,sans-serif;
+    box-sizing:border-box;
+}
+h3 {
+    margin-bottom:5px;
+}
+p {
+    margin:0 0 1em 0;
+}
+.contentblock {
+    display:flex;
+    position:absolute;
+    left:0px;
+    right:0px;
+    top:0px;
+    bottom:0px;
+    padding:10px;
+    line-height:0;
+}
+.mainblock {
+    position:relative;
+    flex:1 1 300px;
+    border:1px solid #ddd;
+}
+.rightblock {
+    flex:0 0 300px;
+    height:100%;
+    overflow:auto;
+    margin-left:10px;
+    line-height:110%;
+}
+#webglView {
+    width:100%;
+    height:100%;
+    touch-action:none; /* prevent browser handle pointer events */
+}
+#info {
+    position:absolute;
+    top:0;
+    right:0;
+    margin-top:5px;
+    margin-right:5px;
+    line-height:110%;
+}
+input[type=range] {
+    vertical-align:middle;
+}
+
+.flexbox {
+    display:flex;
+}
+.flexcol1 {
+    flex:1 1 auto;
+}
+.flexcol2 {
+    flex:0 0 40px;
+}
+
+/* custom input range */
+.slider {
+    -webkit-appearance:none;
+    height:5px;
+    background-color:#e0e0e0;
+    margin:10px 0 20px 0;
+}
+.slider::-webkit-slider-thumb {
+    -webkit-appearance:none;
+    background-color:#07f;
+    width:20px;
+    height:20px;
+    border-radius:50%;
+    cursor:pointer;
+}
+.slider::-moz-range-thumb {
+    background-color:#07f;
+    width:20px;
+    height:20px;
+    border-radius:50%;
+    cursor:pointer;
+}
+.slider::-webkit-slider-thumb:hover, .slider::-webkit-slider-thumb:active {
+    background-color:#05f;
+}
+.slider::-moz-range-thumb:hover, .slider::-moz-range-thumb:active {
+    background-color:#05f;
+}
+
+.noselect {
+    -webkit-touch-callout:none;
+    -webkit-user-select:none;
+    -ms-user-select:none;
+    user-select:none;
+}
+</style>
+
+
+
+<!-- JavaScript -->
+<script src="files/js/Logger.js"></script>
+<!-- WebGL libs -->
+<script src="files/js/Vectors.js"></script>
+<script src="files/js/Matrices.js"></script>
+<script src="files/js/Quaternion.js"></script>
+<script src="files/js/Light.js"></script>
+<script src="files/js/Material.js"></script>
+<script src="files/js/Timer.js"></script>
+<script src="files/js/FrameRate.js"></script>
+<script src="files/js/MouseState.js"></script>
+<script src="files/js/AnimationMode.js"></script>
+<script src="files/js/OrbitCamera.js"></script>
+<script src="files/js/FrameBuffer.js"></script>
+<script src="files/js/Sphere.js"></script>
+<script src="files/js/Line.js"></script>
+<script src="files/js/Plane.js"></script>
+<script src="files/js/TrefoilKnot.js"></script>
+<script src="files/js/Cylinder.js"></script>
+<script src="files/js/ObjModel.js"></script>
+<script src="files/js/Quad.js"></script>
+<script src="files/js/webglUtils.js"></script>
+
+<script>
+let gl = null;
+
+// constants
+const FOV_V = 45;
+const ANIM_DURATION = 500;
+const Z_NEAR = 1;
+const Z_FAR = 1000;
+const D2R = Math.PI / 180;
+const MAP_SIZE = 1024;      // shadow map dimension
+const LIGHT_FOV = 80.0;
+const LIGHT_NEAR = 5;
+const LIGHT_FAR = 50;
+const LIGHT_ORTHO_S = 15;   // ortho proj size
+const LIGHT_R = 15;         // radius
+const LIGHT_H = 10;         // height
+
+
+///////////////////////////////////////////////////////////////////////////////
+// main entry point
+///////////////////////////////////////////////////////////////////////////////
+document.addEventListener("DOMContentLoaded", () =>
+{
+    let success = initWebGL("webglView");
+    if(!success)
+        return;
+
+    // init html elements
+    initHtmlElements();
+});
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init WebGL
+///////////////////////////////////////////////////////////////////////////////
+function initWebGL(canvasId)
+{
+    try{
+
+    //Logger.show();
+
+    let canvas = document.getElementById(canvasId);
+    if(!isWebGLSupported())
+    {
+        let node = canvas.parentNode;
+        let message = "This page requires WebGL enabled browser.<br/>" +
+                      "<a href='http://get.webgl.org'>Click here to upgrade your browser.</a>";
+        node.innerHTML = "<div style='width:100%; height:100%; text-align:center; line-height:1em; background:#fff;'>\n" +
+                         message +
+                         "</div>\n";
+
+        log("[ERROR] The browser does not support WebGL.");
+        return false;
+    }
+
+    // get context
+    gl = getContextGL(canvas, {stencil:true});
+    if(!gl)
+    {
+        //log("[ERROR] Failed to get WebGL context.");
+        return false;
+    }
+    logWebGL(gl);
+
+    // remember canvas
+    gl.canvas = canvas;
+
+    // init camera with position and target
+    gl.camera = new OrbitCamera(0, 10, 15, 0, 0, 0);
+    log("Created an orbit camera.");
+    log(gl.camera);
+
+    // init 2D quad to draw depth image
+    gl.quad = new Quad(gl);
+    gl.quad.reverseTextureOrientation(); // top-down orientation
+    
+    initGL(canvas.width, canvas.height);
+    initGLSL();
+    log("WebGL is initialized.");
+
+    // init app ===============================================================
+    gl.depthBufferVisible = true;
+    gl.lightSpinning = true;
+    gl.lightSpinTime = 0;
+    gl.lightProjectionMode = "ortho";
+
+    // create fbos
+    gl.mapSize = MAP_SIZE;
+    gl.depthOffset = 0.0000;
+    gl.fboDepth = new FrameBuffer(gl);
+    gl.fboDepth.init(gl.mapSize, gl.mapSize);
+    log("Depth Buffer Size: " + gl.fboDepth.depthBits + " bits");
+
+    // load OBJ model
+    gl.obj = new ObjModel(gl);
+    gl.obj.read("files/models/debugger_small_10k.obj").then(obj =>
+    {
+        log(obj);
+        initObj(obj);
+        gl.obj.tex = loadTexture(gl, "files/images/debugger.png", false);
+    }).catch(msg => { log(msg); });
+
+    // create a knot
+    gl.knot = new TrefoilKnot(gl, 1.5, 0.7, 0.4, 3, 90, 18, false);
+    gl.knot.tex = loadTexture(gl, "files/images/grid4096x512.png", true);
+    gl.knot.material = new Material(1, 0.2, 0.2, 1);
+    gl.knot.material.ambient.set(0.2, 0, 0, 1);
+    log(gl.knot);
+
+    // create pillars
+    gl.cylinder = new Cylinder(gl, 0.5, 0.5, 8);    // baseR, topR, height
+    gl.cylinder.material = new Material(0, 1, 0, 1);
+    gl.cylinder.material.ambient.set(0, 0.2, 0, 1);
+    log(gl.cylinder);
+
+    // init VBOs
+    initFloor();
+
+    // load textures
+    gl.tex0 = gl.createTexture();
+    setupDefaultTexture(gl, gl.tex0); // white texture
+    gl.tex1 = loadTexture(gl, "files/images/grid512.png", false);
+
+    // init shadowmap projection matrix
+    setLightProjection("ortho");
+
+    // init array of pointer objects
+    gl.pointers = [];
+
+    // register event handlers
+    window.addEventListener("resize",  handleResize);
+    log("Added window resize envent listener, handleResize().");
+    canvas.addEventListener("click", handleClick);
+    log("Added canvas click event listener, handleClick().");
+    canvas.addEventListener("contextmenu", handleContextMenu);
+    log("Added canvas contextmenu event listener, handleContextMenu().");
+    canvas.addEventListener("wheel", handleWheel);
+    log("Added canvas wheel event listeners, handleWheel()");
+    // canvas pointer events
+    canvas.addEventListener("pointerdown", handlePointerDown, false);
+    log("Added canvas pointerdown event listeners, handlePointerDown()");
+    canvas.addEventListener("pointerup", handlePointerUp, false);
+    log("Added canvas pointerup event listeners, handlePointerUp()");
+    canvas.addEventListener("pointermove", handlePointerMove, false);
+    log("Added canvas pointermove event listeners, handlePointerMove()");
+    canvas.addEventListener("pointercancel", handlePointerCancel, false);
+    log("Added canvas pointercancel event listeners, handlePointerCancel()");
+    canvas.addEventListener("pointerleave", handlePointerLeave, false);
+    log("Added canvas pointerleave event listeners, handlePointerLeave()");
+
+    // ready to start rendering loop
+    handleResize();
+
+    // ready to start rendering loop
+    startRendering(gl);
+
+    }catch(e){
+        log("[ERROR] " + e.message);
+        alert("[ERROR] " + e.message);
+    }
+
+    return true;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create a floor
+///////////////////////////////////////////////////////////////////////////////
+function initFloor()
+{
+    let W = 20;
+    let H = 20;
+    let X = 0;
+    let Y = 0;
+    let Z = 0;
+    let S = 1; // uv scale
+    let T = 1; // uv scale
+
+    let vertices = new Float32Array(4 * 10); // interleave vertex data
+
+    // interleaved triangle strip
+    vertices[0] = X - W*0.5;    vertices[1] = Y;    vertices[2] = Z - H*0.5;
+    vertices[3] = 0;            vertices[4] = 1;    vertices[5] = 0;
+    vertices[6] = 0;            vertices[7] = 0;
+    vertices[8] = 0;            vertices[9] = 0;
+
+    vertices[10] = X - W*0.5;   vertices[11] = Y;   vertices[12] = Z + H*0.5;
+    vertices[13] = 0;           vertices[14] = 1;   vertices[15] = 0;
+    vertices[16] = 0;           vertices[17] = T;
+    vertices[18] = 0;           vertices[19] = 1;
+
+    vertices[20] = X + W*0.5;   vertices[21] = Y;   vertices[22] = Z - H*0.5;
+    vertices[23] = 0;           vertices[24] = 1;   vertices[25] = 0;
+    vertices[26] = S;           vertices[27] = 0;
+    vertices[28] = 1;           vertices[29] = 0;
+
+    vertices[30] = X + W*0.5;   vertices[31] = Y;   vertices[32] = Z + H*0.5;
+    vertices[33] = 0;           vertices[34] = 1;   vertices[35] = 0;
+    vertices[36] = S;           vertices[37] = T;
+    vertices[38] = 1;           vertices[39] = 1;
+
+    // create interleaved vertex buffer
+    gl.floor = {};
+    gl.floor.vboVertex = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.floor.vboVertex);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    //gl.floor.matrix = new Matrix4();
+    //gl.floor.matrix.translate(0, -1, 0);
+
+    // load texture
+    //gl.floor.tex0 = loadTexture(gl, "files/images/marble1.jpg", true);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// create vbo for OBJ
+///////////////////////////////////////////////////////////////////////////////
+function initObj(obj)
+{
+    if(!gl.obj.vbo)
+        gl.obj.vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.obj.vbo);
+    let dataSize = obj.vertices.byteLength + obj.normals.byteLength + obj.texCoords.byteLength; // total # of bytes
+    gl.bufferData(gl.ARRAY_BUFFER, dataSize, gl.STATIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, obj.vertices);
+    gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength, obj.normals);
+    gl.bufferSubData(gl.ARRAY_BUFFER, obj.vertices.byteLength + obj.normals.byteLength, obj.texCoords);
+    gl.obj.vbo.normalOffset = obj.vertices.byteLength;
+    gl.obj.vbo.texCoordOffset = obj.vertices.byteLength + obj.normals.byteLength;
+
+    if(!gl.obj.ibo)
+        gl.obj.ibo = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.obj.ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, obj.indices, gl.STATIC_DRAW);
+    gl.obj.ibo.indexCount = obj.indices.length;
+
+    // clear array
+    obj.clearArrays();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw a single frame
+///////////////////////////////////////////////////////////////////////////////
+function frame()
+{
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    drawShadowMap();
+    drawScene();
+
+    if(gl.depthBufferVisible)
+        drawQuad();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// post frame
+///////////////////////////////////////////////////////////////////////////////
+function postFrame()
+{
+    if(gl.lightSpinning)
+    {
+        gl.lightSpinTime += gl.frameTime;
+        // update light position in world space
+        gl.light.position.x = LIGHT_R * Math.cos(gl.lightSpinTime * 0.0005);
+        gl.light.position.z = LIGHT_R * Math.sin(gl.lightSpinTime * 0.0005);
+        gl.light.position.y = LIGHT_H;
+        updateLightMatrix();                // update light view matrix 
+        //console.log(gl.light.position);
+    }
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function updateLightMatrix()
+{
+    // NOTE: swap from and to for camera(view)
+    let from = new Vector3(0, 0, 0);
+    let to = gl.light.position;
+    let up = new Vector3(0, 1, 0);
+    gl.matrixLightView = Matrix4.lookat(from, to, up);
+
+    // move camera away
+    let dist = from.distance(to);
+    gl.matrixLightView.setTranslation(0, 0, -dist);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+function setLightProjection(mode)
+{
+    gl.lightProjectionMode = mode;
+    if(mode == "ortho")
+    {
+        gl.matrixLightProjection = Matrix4.makeOrthographic(-LIGHT_ORTHO_S, LIGHT_ORTHO_S, -LIGHT_ORTHO_S, LIGHT_ORTHO_S, LIGHT_NEAR, LIGHT_FAR);
+    }
+    else
+    {
+        gl.matrixLightProjection = Matrix4.makePerspective(LIGHT_FOV, 1, LIGHT_NEAR, LIGHT_FAR);
+    }
+    
+    // normalize matrix for NDC [-1,1] to tex coord [0,1]
+    // x' = 0.5 * x + 0.5
+    gl.matrixLightNorm = new Matrix4(0.5, 0,   0,   0,
+                                     0,   0.5, 0,   0,
+                                     0,   0,   0.5, 0,
+                                     0.5, 0.5, 0.5, 1);
+    
+    gl.matrixShadowMap = gl.matrixLightNorm.clone().multiply(gl.matrixLightProjection);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw
+///////////////////////////////////////////////////////////////////////////////
+function drawScene()
+{
+    gl.program = gl.shaderPrograms["blinnTexShadow"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+    // transform light position to eye space
+    let lightPosition = gl.matrixView.transform(gl.light.position);
+    gl.uniform4fv(gl.program.uniform.lightPosition, lightPosition.toFloat32Array());
+
+    // compute shadowmap matrix
+    gl.matrixShadowMap = gl.matrixLightNorm.clone();
+    gl.matrixShadowMap.multiply(gl.matrixLightProjection);
+    gl.matrixShadowMap.multiply(gl.matrixLightView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixShadowMap, false, gl.matrixShadowMap.m);
+
+    // shadow map info
+    gl.uniform1f(gl.program.uniform.depthOffset, gl.depthOffset);
+    gl.uniform2f(gl.program.uniform.shadowDimension, gl.mapSize, gl.mapSize);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, gl.fboDepth.depth);
+    gl.uniform1i(gl.program.uniform.map1, 1);
+
+    //gl.disable(gl.CULL_FACE);
+    
+    // draw
+    drawObj();
+    drawKnot();
+    drawCylinders();
+    drawFloor();
+
+    //gl.enable(gl.CULL_FACE);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw to shadowmap from light point
+///////////////////////////////////////////////////////////////////////////////
+function drawShadowMap()
+{
+    gl.program = gl.shaderPrograms["depth"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    gl.fboDepth.bind();
+
+    gl.viewport(0, 0, gl.fboDepth.width, gl.fboDepth.height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    gl.cullFace(gl.FRONT);  // draw fack face to avoid acne
+
+    drawObjForShadow();
+    drawKnotForShadow();
+    drawCylindersForShadow();
+    drawFloorForShadow();
+
+    gl.cullFace(gl.BACK);
+
+    gl.fboDepth.unbind();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw depth image at bottom-right corner
+///////////////////////////////////////////////////////////////////////////////
+function drawQuad()
+{
+    gl.program = gl.shaderPrograms["postRed"];
+    if(!gl.program)
+        return;
+    gl.useProgram(gl.program);
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.fboDepth.depth);
+    gl.uniform2f(gl.program.uniform.screenDimension, gl.canvas.width, gl.canvas.height);
+    gl.quad.draw();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw the floor
+///////////////////////////////////////////////////////////////////////////////
+function drawFloor()
+{
+    // model matrix
+    //gl.matrixModel = gl.floor.matrix;
+    gl.matrixModel.identity();
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, gl.matrixModel.m);
+
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+
+    // compute normal transform
+    gl.matrixNormal = gl.matrixModelView.getRotationMatrix();
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+
+    // compute modelviewprojection transform
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.uniform4fv(gl.program.uniform.materialAmbient, gl.materialFloor.getAmbient());
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.materialFloor.getDiffuse());
+    gl.uniform4fv(gl.program.uniform.materialSpecular, gl.materialFloor.getSpecular());
+
+    // bind texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
+    //gl.bindTexture(gl.TEXTURE_2D, gl.floor.tex0);
+    //gl.activeTexture(gl.TEXTURE1);
+    //gl.bindTexture(gl.TEXTURE_2D, gl.fboDepth.tex);
+
+    //gl.disable(gl.CULL_FACE);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.floor.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 40, 0);
+    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 40, 3*4);
+    gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 40, 6*4);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    //gl.enable(gl.CULL_FACE);
+}
+
+function drawFloorForShadow()
+{
+    // compute MVP matrix from light pos
+    gl.matrixModel.identity();
+    gl.matrixModelViewProjection = gl.matrixLightProjection.clone();
+    gl.matrixModelViewProjection.multiply(gl.matrixLightView);
+    gl.matrixModelViewProjection.multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.floor.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 40, 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw OBJ model
+///////////////////////////////////////////////////////////////////////////////
+function drawObj()
+{
+    if(!gl.obj.vbo || !gl.obj.ibo)
+        return;
+
+    // transform matrices
+    gl.matrixModel.identity();
+    gl.matrixModel.translate(0.0, -gl.obj.minY, 0.0);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, gl.matrixModel.m);
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+    gl.matrixNormal = gl.matrixModelView.getRotationMatrix();
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.uniform4fv(gl.program.uniform.materialAmbient, gl.material.getAmbient());
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.material.getDiffuse());
+    gl.uniform4fv(gl.program.uniform.materialSpecular, gl.material.getSpecular());
+
+    // bind texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.obj.tex);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.obj.vbo);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, 0, gl.obj.vbo.normalOffset);
+    gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, 0, gl.obj.vbo.texCoordOffset);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.obj.ibo);
+    gl.drawElements(gl.TRIANGLES, gl.obj.ibo.indexCount, gl.obj.indexType, 0);
+}
+
+function drawObjForShadow()
+{
+    if(!gl.obj.vbo || !gl.obj.ibo)
+        return;
+
+    // compute MVP matrix from light pos
+    gl.matrixModel.identity();
+    gl.matrixModel.translate(0.0, -gl.obj.minY, 0.0);
+    gl.matrixModelViewProjection = gl.matrixLightProjection.clone();
+    gl.matrixModelViewProjection.multiply(gl.matrixLightView);
+    gl.matrixModelViewProjection.multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.obj.vbo);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.obj.ibo);
+    gl.drawElements(gl.TRIANGLES, gl.obj.ibo.indexCount, gl.obj.indexType, 0);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw trefoil knot
+///////////////////////////////////////////////////////////////////////////////
+function drawKnot()
+{
+    // transform matrices
+    gl.matrixModel.identity();
+    gl.matrixModel.translate(7.0, 3.0, 0.0);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, gl.matrixModel.m);
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+    gl.matrixNormal = gl.matrixModelView.getRotationMatrix();
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.uniform4fv(gl.program.uniform.materialAmbient, gl.knot.material.getAmbient());
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.knot.material.getDiffuse());
+    gl.uniform4fv(gl.program.uniform.materialSpecular, gl.knot.material.getSpecular());
+
+    // bind texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.knot.tex);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.knot.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, gl.knot.stride, 0);
+    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, gl.knot.stride, 12);
+    gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, gl.knot.stride, 24);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.knot.vboIndex);
+    gl.drawElements(gl.TRIANGLES, gl.knot.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+}
+
+function drawKnotForShadow()
+{
+    // compute MVP matrix from light pos
+    gl.matrixModel.identity();
+    gl.matrixModel.translate(7.0, 3.0, 0.0);
+    gl.matrixModelViewProjection = gl.matrixLightProjection.clone();
+    gl.matrixModelViewProjection.multiply(gl.matrixLightView);
+    gl.matrixModelViewProjection.multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.knot.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, gl.knot.stride, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.knot.vboIndex);
+    gl.drawElements(gl.TRIANGLES, gl.knot.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// draw cylinders
+///////////////////////////////////////////////////////////////////////////////
+function drawCylinders()
+{
+    // bind texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gl.tex0);
+
+    gl.uniform4fv(gl.program.uniform.materialAmbient, gl.cylinder.material.getAmbient());
+    gl.uniform4fv(gl.program.uniform.materialDiffuse, gl.cylinder.material.getDiffuse());
+    gl.uniform4fv(gl.program.uniform.materialSpecular, gl.cylinder.material.getSpecular());
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.cylinder.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, gl.cylinder.stride, 0);
+    gl.vertexAttribPointer(gl.program.attribute.vertexNormal, 3, gl.FLOAT, false, gl.cylinder.stride, 12);
+    gl.vertexAttribPointer(gl.program.attribute.vertexTexCoord0, 2, gl.FLOAT, false, gl.cylinder.stride, 24);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.cylinder.vboIndex);
+
+    // transform matrices
+    gl.matrixModel.identity();
+    gl.matrixModel.rotateX(-90 * D2R);
+    gl.matrixModel.translate(-5.0, 4.0, 5.0);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, gl.matrixModel.m);
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+    gl.matrixNormal = gl.matrixModelView.getRotationMatrix();
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.drawElements(gl.TRIANGLES, gl.cylinder.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+
+    // transform matrices
+    gl.matrixModel.identity();
+    gl.matrixModel.rotateX(-90 * D2R);
+    gl.matrixModel.translate(-5.0, 4.0, 0.0);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, gl.matrixModel.m);
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+    gl.matrixNormal = gl.matrixModelView.getRotationMatrix();
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.drawElements(gl.TRIANGLES, gl.cylinder.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+
+    // transform matrices
+    gl.matrixModel.identity();
+    gl.matrixModel.rotateX(-90 * D2R);
+    gl.matrixModel.translate(-5.0, 4.0, -5.0);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, gl.matrixModel.m);
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
+    gl.matrixNormal = gl.matrixModelView.getRotationMatrix();
+    gl.uniformMatrix4fv(gl.program.uniform.matrixNormal, false, gl.matrixNormal.m);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.drawElements(gl.TRIANGLES, gl.cylinder.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+}
+
+function drawCylindersForShadow()
+{
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.cylinder.vboVertex);
+    gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, gl.cylinder.stride, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.cylinder.vboIndex);
+
+    // compute MVP matrix from light pos
+    gl.matrixModel.identity();
+    gl.matrixModel.rotateX(-90 * D2R);
+    gl.matrixModel.translate(-5.0, 4.0, 5.0);
+    gl.matrixModelViewProjection = gl.matrixLightProjection.clone();
+    gl.matrixModelViewProjection.multiply(gl.matrixLightView);
+    gl.matrixModelViewProjection.multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.drawElements(gl.TRIANGLES, gl.cylinder.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+
+    // transform matrices
+    gl.matrixModel.identity();
+    gl.matrixModel.rotateX(-90 * D2R);
+    gl.matrixModel.translate(-5.0, 4.0, 0.0);
+    gl.matrixModelViewProjection = gl.matrixLightProjection.clone();
+    gl.matrixModelViewProjection.multiply(gl.matrixLightView);
+    gl.matrixModelViewProjection.multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.drawElements(gl.TRIANGLES, gl.cylinder.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+
+    // transform matrices
+    gl.matrixModel.identity();
+    gl.matrixModel.rotateX(-90 * D2R);
+    gl.matrixModel.translate(-5.0, 4.0, -5.0);
+    gl.matrixModelViewProjection = gl.matrixLightProjection.clone();
+    gl.matrixModelViewProjection.multiply(gl.matrixLightView);
+    gl.matrixModelViewProjection.multiply(gl.matrixModel);
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+
+    gl.drawElements(gl.TRIANGLES, gl.cylinder.getIndexCount(), gl.UNSIGNED_SHORT, 0);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// reshape OpenGL window when the canvas is resized
+///////////////////////////////////////////////////////////////////////////////
+function handleResize()
+{
+    // resize window to fit to parent
+    gl.canvas.width = gl.canvas.parentNode.clientWidth;
+    gl.canvas.height = gl.canvas.parentNode.clientHeight;
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.matrixProjection = Matrix4.makePerspective(FOV_V, gl.canvas.width/gl.canvas.height, gl.nearPlane, gl.farPlane);
+
+    log("Window is resized: " + gl.canvas.width + " x " + gl.canvas.height);
+
+    // resize quad
+    let quadSize = gl.canvas.width / 4;
+    let left = gl.canvas.width - quadSize;
+    let right = gl.canvas.width;
+    let bottom = 0;
+    let top = quadSize;
+    gl.quad.set(left, right, bottom, top);
+    log("Quad Size: " + (right-left) + " x " + (top-bottom));
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handlers for mouse event
+///////////////////////////////////////////////////////////////////////////////
+function handleWheel(e)
+{
+    const ZOOM_SCALE = 0.1;
+    if(e.deltaY != 0)
+    {
+        let deltaDistance = 0;
+        if(e.deltaY > 0)    // wheel down
+            deltaDistance = -ZOOM_SCALE;
+        else                // wheel up
+            deltaDistance = ZOOM_SCALE;
+
+        if((gl.camera.distance - deltaDistance) < gl.nearPlane)
+        {
+            deltaDistance = gl.camera.distance - gl.nearPlane;
+        }
+        else if((gl.camera.distance - deltaDistance) > gl.farPlane)
+        {
+            deltaDistance = gl.camera.distance - gl.farPlane;
+        }
+
+        gl.camera.moveForward(deltaDistance);
+    }
+
+    e.preventDefault();
+}
+
+function handleClick(e)
+{
+}
+
+function handleContextMenu(e)
+{
+    e.preventDefault(); // disable context menu
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// handle pointer events: input is PointerEvent object
+///////////////////////////////////////////////////////////////////////////////
+function handlePointerDown(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    let offset = getElementOffset(this);    // get canvas offset
+    gl.pointers.push(copyPointer(pe, offset));
+
+    // remember down pointer and angles when pointer down
+    if(gl.pointers.length == 1)
+    {
+        gl.camera.pointerAngle = gl.camera.angle.clone();
+        gl.pointers.downs = []; // clear
+        gl.pointers.downs.push(copyPointer(pe, offset));
+        // handle right mouse button(0=left, 2=right)
+        gl.pointers[0].button = pe.button;
+    }
+    else if(gl.pointers.length == 2)
+    {
+        // remember second pointer
+        gl.pointers.downs.push(copyPointer(pe, offset));
+    }
+}
+
+function handlePointerUp(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    // get array index matching from gl.pointers
+    let index = gl.pointers.findIndex(pointer => pointer.id == pe.pointerId);
+    if(index >= 0) // found
+    {
+        gl.pointers.splice(index, 1);   // remove it
+        gl.pointers.distance = 0;       // clear
+    }
+}
+
+function handlePointerMove(pe)
+{
+    pe.preventDefault();    // prevent pointer event being delivered
+
+    // get the current moving pointer and replace it in the array
+    let offset = getElementOffset(this);    // get canvas offset
+    let index = gl.pointers.findIndex(p => p.id == pe.pointerId);
+    if(index == 0)
+    {
+        // remember delta movement
+        gl.pointers[0].delta = new Vector2((pe.pageX - offset.x) - gl.pointers[0].x, (pe.pageY - offset.y) - gl.pointers[0].y);
+        // update
+        gl.pointers[0].x = pe.pageX - offset.x;
+        gl.pointers[0].y = pe.pageY - offset.y;
+    }
+    else if(index == 1)
+    {
+        // remember delta movement
+        gl.pointers[1].delta = new Vector2((pe.pageX - offset.x) - gl.pointers[1].x, (pe.pageY - offset.y) - gl.pointers[1].y);
+        // update
+        gl.pointers[1].x = pe.pageX - offset.x;
+        gl.pointers[1].y = pe.pageY - offset.y;
+    }
+
+    // if 2 pointers, perform shift/zoom
+    if(gl.pointers.length == 2)
+    {
+        const SCALE_SHIFT = 0.03;
+        const SCALE_ZOOM = 0.01;
+
+        let d1 = gl.pointers[0].delta.normalize();
+        let d2 = gl.pointers[1].delta.normalize();
+        let dir = d1.add(d2).normalize();   // sum vector of 2 delta vectors
+        let v = new Vector2(gl.pointers[1].x - gl.pointers[0].x, gl.pointers[1].y - gl.pointers[0].y);
+        let dist = v.length();              // distance of 2 vectors
+
+        if(d1.dot(d2) > 0.95)
+        {
+            // shift camera if same direction
+            gl.camera.shift(dir.scale(SCALE_SHIFT));
+        }
+        else
+        {
+            // zoom camera if opposite direction
+            let deltaDistance = 0;
+            if(gl.pointers.distance > 0)
+                deltaDistance = dist - gl.pointers.distance;
+            gl.pointers.distance = dist;     // remember
+            gl.camera.moveForward(deltaDistance * SCALE_ZOOM);
+        }
+    }
+    // if 1 down, perform rotate
+    else if(gl.pointers.length == 1)
+    {
+        const SCALE_ROTATE = 0.2;
+        const SCALE_SHIFT = 0.05;
+
+        // shift if dragging right mouse button
+        if(pe.pointerType == "mouse" && gl.pointers[0].button == 2)
+        {
+            let delta = gl.pointers[0].delta.normalize();
+            delta = delta.scale(SCALE_SHIFT);
+            gl.camera.shift(delta);
+        }
+        else
+        {
+            let angle = new Vector3();
+            angle.x = gl.camera.pointerAngle.x + (gl.pointers[0].y - gl.pointers.downs[0].y) * SCALE_ROTATE;
+            angle.y = gl.camera.pointerAngle.y - (gl.pointers[0].x - gl.pointers.downs[0].x) * SCALE_ROTATE;
+
+            gl.camera.rotateTo(angle);
+        }
+    }
+}
+
+function handlePointerCancel(pe)
+{
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
+}
+
+function handlePointerLeave(pe)
+{
+    gl.pointers.length = 0; // clear
+    gl.pointers.distance = 0;
+}
+
+function copyPointer(pe, offset={x:0,y:0})
+{
+    // return pointer data
+    return {id:pe.pointerId, x:pe.clientX - offset.x, y:pe.clientY - offset.y};
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init OpenGL
+///////////////////////////////////////////////////////////////////////////////
+function initGL(width, height)
+{
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clearDepth(1.0);
+    gl.enable(gl.DEPTH_TEST);   // enable depth test
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);    // enable culling backface
+    gl.cullFace(gl.BACK);
+    gl.enable(gl.BLEND);        // enable blend
+
+    // default light
+    gl.light = new Light(1, 5, 0, 1); // light position in world space
+    //gl.light.position.normalize(); //@@ fix normalize()
+    gl.light.setColor(1.0, 1.0, 1.0, 1.0);        // light color
+    gl.light.setAttenuations(1, 0.0, 0); // attenuations (constant, linear, quad)
+    log("    Light Position: " + gl.light.position);
+    log("       Light Color: " + gl.light.color);
+    log("Light Attenuations: " + gl.light.attenuations);
+    log();
+
+    // default material
+    gl.material = new Material(0.8, 0.8, 0.8, 1.0);    // with default diffuse
+    gl.material.ambient.set(0.2, 0.2, 0.2, 1);
+    gl.material.specular.set(1, 1, 1, 1);
+    gl.material.shininess = 128;
+    log("  Material Ambient: " + gl.material.ambient);
+    log("  Material Diffuse: " + gl.material.diffuse);
+    log(" Material Specualr: " + gl.material.specular);
+    log("Material Shininess: " + gl.material.shininess);
+    log();
+
+    // floor material
+    gl.materialFloor = new Material(1, 1, 1, 1.0);
+    gl.materialFloor.specular.set(0.1, 0.1, 0.1, 1);
+    log("  Floor Material Ambient: " + gl.materialFloor.ambient);
+    log("  Floor Material Diffuse: " + gl.materialFloor.diffuse);
+    log(" Floor Material Specualr: " + gl.materialFloor.specular);
+    log("Floor Material Shininess: " + gl.materialFloor.shininess);
+    log();
+
+    // set near and far clip planes
+    gl.nearPlane = Z_NEAR;
+    gl.farPlane = Z_FAR;
+    gl.linearDepthFactor = 1 / (gl.farPlane - gl.nearPlane);    // linear scale factor 
+
+    // init matrices
+    handleResize();
+    gl.matrixModel = new Matrix4();
+    gl.matrixView = gl.camera.matrix;
+    gl.matrixModelView = gl.matrixView.clone().multiply(gl.matrixModel);
+    gl.matrixModelViewProjection = gl.matrixProjection.clone().multiply(gl.matrixModelView);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init GLSL (shaders and programs)
+///////////////////////////////////////////////////////////////////////////////
+function initGLSL()
+{
+    // enable all vertexAttribArray
+    initVertexAttribArrays(gl);
+
+    gl.shaderPrograms = {}; // associative array
+
+    // load default shader
+    createShaderProgram(gl, "files/glsl/gles_blinnTex.vert", "files/glsl/gles_blinnTex.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
+        gl.uniform4fv(program.uniform.lightColor, gl.light.getColor());
+        gl.uniform3fv(program.uniform.lightAttenuation, gl.light.getAttenuations());
+        gl.uniform4fv(program.uniform.materialAmbient, gl.material.getAmbient());
+        gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
+        gl.uniform4fv(program.uniform.materialSpecular, gl.material.getSpecular());
+        gl.uniform1f(program.uniform.materialShininess, gl.material.shininess);
+        gl.uniform1i(program.uniform.map0, 0);
+
+        gl.shaderPrograms["blinnTex"] = program;
+    });
+
+    // load default shader with shadowmap
+    createShaderProgram(gl, "files/glsl/gles_blinnTexShadow.vert", "files/glsl/gles_blinnTexShadow.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
+        gl.uniform4fv(program.uniform.lightColor, gl.light.getColor());
+        gl.uniform3fv(program.uniform.lightAttenuation, gl.light.getAttenuations());
+        gl.uniform4fv(program.uniform.materialAmbient, gl.material.getAmbient());
+        gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
+        gl.uniform4fv(program.uniform.materialSpecular, gl.material.getSpecular());
+        gl.uniform1f(program.uniform.materialShininess, gl.material.shininess);
+        gl.uniform1f(program.uniform.depthOffset, gl.depthOffset);        
+        gl.uniform2f(program.uniform.shadowDimension, gl.mapSize, gl.mapSize);
+        gl.uniform1i(program.uniform.map0, 0);  // base texture
+        gl.uniform1i(program.uniform.map1, 0);  // shadow map
+
+        gl.shaderPrograms["blinnTexShadow"] = program;
+    });
+
+    // load depthbuffer shader
+    createShaderProgram(gl, "files/glsl/gles_depth.vert", "files/glsl/gles_depth.frag").then(program =>
+    {
+        gl.useProgram(program);
+        gl.uniformMatrix4fv(program.uniform.matrixModelViewProjection, false, gl.matrixModelViewProjection.m);
+        gl.shaderPrograms["depth"] = program;
+    });
+
+    // load floor shader
+    createShaderProgram(gl, "files/glsl/gles_floorProj.vert", "files/glsl/gles_floorProj.frag").then(program =>
+    {
+        gl.useProgram(program);
+
+        // setup attribs
+        gl.enableVertexAttribArray(program.attribute.vertexPosition);
+        gl.enableVertexAttribArray(program.attribute.vertexNormal);
+        gl.enableVertexAttribArray(program.attribute.vertexTexCoord0);
+
+        // setup uniforms
+        gl.uniform4fv(program.uniform.lightPosition, gl.light.getPosition());
+        gl.uniform4fv(program.uniform.lightColor, gl.light.getColor());
+        gl.uniform3fv(program.uniform.lightAttenuations, gl.light.getAttenuations());
+        gl.uniform4fv(program.uniform.materialAmbient, gl.material.getAmbient());
+        gl.uniform4fv(program.uniform.materialDiffuse, gl.material.getDiffuse());
+        gl.uniform4fv(program.uniform.materialSpecular, gl.material.getSpecular());
+        gl.uniform1f(program.uniform.materialShininess, gl.material.shininess);
+        gl.uniform1i(program.uniform.map0, 0);
+        gl.uniform1i(program.uniform.map1, 1);
+
+        gl.shaderPrograms["floorProj"] = program;
+    });
+
+    // load 2D rendering shader
+    createShaderProgram(gl, "files/glsl/gles_postRed.vert", "files/glsl/gles_postRed.frag").then(program =>
+    {
+        gl.useProgram(program);
+        gl.uniform1i(program.uniform.map0, 0);
+        gl.shaderPrograms["postRed"] = program;
+    });
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// print WebGL RC info
+///////////////////////////////////////////////////////////////////////////////
+function logWebGL(gl)
+{
+    log("===== WebGL Info =====");
+    log("   Version: " + gl.getParameter(gl.VERSION));
+    log("  GLSL Ver: " + gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+    log("    Vendor: " + gl.getParameter(gl.VENDOR));
+    log("  Renderer: " + gl.getParameter(gl.RENDERER));
+    log("     Color: (" + gl.getParameter(gl.RED_BITS) + ", " + gl.getParameter(gl.GREEN_BITS) + ", " + gl.getParameter(gl.BLUE_BITS) + ", " + gl.getParameter(gl.ALPHA_BITS) + ") bits");
+    log("     Depth: " + gl.getParameter(gl.DEPTH_BITS) + " bits");
+    log("   Stencil: " + gl.getParameter(gl.STENCIL_BITS) + " bits");
+    log("Extentions: " + gl.getSupportedExtensions());
+    log();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// start rendering loop
+///////////////////////////////////////////////////////////////////////////////
+function startRendering(gl)
+{
+    log("\nStarting rendering loop...\n");
+
+    // try to find "requestAnimationFrame" function
+    // if it is not available use setTimeout() instead
+    let requestAnimationFrame = getRequestAnimationFrameFunction(window);
+    let timer = new Timer();
+    gl.fps = new FrameRate("fps");
+    let frameCallback = function()
+    {
+        gl.fps.tick();
+        gl.frameTime = timer.getFrameTime();
+        gl.runTime += gl.frameTime;
+        frame();
+        postFrame();
+        requestAnimationFrame(frameCallback);
+    };
+
+    timer.start();
+    gl.runTime = 0;
+    requestAnimationFrame(frameCallback);
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// init HTML DOM
+///////////////////////////////////////////////////////////////////////////////
+function initHtmlElements()
+{
+    let comboMapSize = document.form1.comboMapSize;
+    comboMapSize.selectedIndex = 2;
+    comboMapSize.addEventListener("change", e =>
+    {
+        gl.mapSize = parseInt(comboMapSize.value);
+        gl.fboDepth.init(gl.mapSize, gl.mapSize);
+    });
+
+    let checkSpin = document.form1.checkSpin;
+    checkSpin.checked = gl.lightSpinning;
+    checkSpin.addEventListener("change", () => gl.lightSpinning = checkSpin.checked);
+
+    let checkDepth = document.form1.checkDepth;
+    checkDepth.checked = gl.depthBufferVisible;
+    checkDepth.addEventListener("change", () => gl.depthBufferVisible = checkDepth.checked);
+
+    let radios = document.form1.projMode;
+    radios.value = "ortho";
+    radios.forEach(radio => { radio.onclick = () => setLightProjection(radio.value); });
+}
+
+</script>
+
+</head>
+
+<body>
+
+<div class="contentblock">
+
+<div class="mainblock">
+<canvas id="webglView" width="300" height="300">
+</canvas>
+<pre id="info">
+<div id="fps">0 FPS</div>
+</pre>
+</div>
+
+<div class="rightblock">
+<h2>
+WebGL: Shadow Map
+</h2>
+
+<form name="form1">
+<label for="comboMapSize">Shadow Map Size: </label>
+<select id="comboMapSize">
+<option value="256">256x256</option>
+<option value="512">512x512</option>
+<option value="1024" selected>1024x1024</option>
+<option value="2048">2048x2048</option>
+<option value="4096">4096x4096</option>
+</select>
+<br>
+<br>
+
+<label><input style="margin-bottom:10px;" type="checkbox" name="checkSpin"> Spin Light</label>
+<br>
+<label><input style="margin-bottom:10px;" type="checkbox" name="checkDepth"> Show Depth Buffer</label>
+<br>
+<br>
+
+<div>Shadow Projection Mode:</div>
+<input style="margin-bottom:10px;" type="radio" id="projMode1" name="projMode" value="ortho" checked><label for="projMode1"> Orthographic</label>
+<br>
+<input style="margin-bottom:10px;" type="radio" id="projMode2" name="projMode" value="persp"><label for="projMode2"> Perspective</label>
+
+</form>
+
+</div>
+<!-- end of right block -->
+
+</div> <!-- end of contentblock -->
+</body>
+</html>

@@ -505,6 +505,9 @@ function drawFloor()
     if(!gl.program) return;
     gl.useProgram(gl.program);
 
+    gl.matrixModel.identity();
+    gl.uniformMatrix4fv(gl.program.uniform.matrixModel, false, gl.matrixModel.m);
+    
     gl.matrixModelView = gl.matrixView.clone().multiply(gl.floor.matrix);
     gl.uniformMatrix4fv(gl.program.uniform.matrixModelView, false, gl.matrixModelView.m);
 
@@ -1377,7 +1380,7 @@ WebGL: Shadow Map
 <input class="flexcol1" type="range" name="rangeLightH" min="1" max="10" step="0.1" value="3"><label class="flexcol2" id="labelLightH" class="col3">4</label>
 </div>
 <br>
-<label><input style="margin-bottom:10px;" type="checkbox" name="checkBlur">Soften Shadow</label>
+<label><input style="margin-bottom:10px;" type="checkbox" name="checkBlur"> Soften Shadow</label>
 
 </form>
 

@@ -531,7 +531,7 @@ function initGLSL(gl)
     // load shaders
     gl.shaderPrograms = {}; // associative array
 
-    // load phong shader with 1 texture
+    // load 2D rendering shader with 1 texture
     createShaderProgram(gl, "files/glsl/gles3_postDefault.vert", "files/glsl/gles3_postDefault.frag").then(program =>
     {
         gl.useProgram(program);
