@@ -27,7 +27,7 @@ This repo contains JavaScript classes and utility functions for WebGL and variou
 24. [Mouse Picking](https://www.songho.ca/webgl/webgl_pick.html): Mouse picking using selection buffer
 25. [Drawing Edges](https://www.songho.ca/webgl/webgl_edge.html): Find and generate edge lines from a 3D geometry using Edge class
 26. [Clipping](https://www.songho.ca/webgl/webgl_clip.html): Clipping with a user-defined plane equation
-27. [Shadow](https://www.songho.ca/webgl/test_shadow1.html): Simple shadow map with depth buffer
+27. [Drawing Shadow](https://www.songho.ca/webgl/test_shadow1.html): Simple shadow map with depth buffer
 
 ## License
 All source code in this repository are under the MIT License. Please see the [LICENSE](LICENSE) for detail.
