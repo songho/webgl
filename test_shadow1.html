@@ -6,7 +6,7 @@ Testing simple shadow map
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2012-09-19
-UPDATED: 2026-08-28
+UPDATED: 2026-10-07
 ===============================================================================
 -->
 
@@ -146,6 +146,8 @@ const MAP_SIZE = 256;       // shadow map dimension
 const LIGHT_R = 6;          // radius
 const LIGHT_A = 90;         // angle in degree
 const LIGHT_H = 4;          // height
+const LIGHT_N = 2;          // light frustum near
+const LIGHT_F = 20;         // light frustum far
 const D2R = Math.PI / 180;
 
 
@@ -651,7 +653,6 @@ function drawLines()
     let p4 = plane.intersect(l4);
     */
 
-
     // set uniforms
     matrixModel.identity();
     gl.uniform1i(gl.program.uniform.matrixComputed, false, false);
@@ -676,10 +677,11 @@ function drawPlane()
         return;
     gl.useProgram(gl.program);
 
-    let p = gl.light.position.clone().subtract(gl.light.position.clone().normalize().scale(gl.nearPlane));
+    let p = gl.light.position.clone().subtract(gl.light.position.clone().normalize().scale(LIGHT_N));
 
     let matrixModel = new Matrix4();
     matrixModel.lookAt(gl.light.position.x,gl.light.position.y,gl.light.position.z, 0,1,0);
+    matrixModel.scale(LIGHT_N, LIGHT_N, LIGHT_N);
     matrixModel.translate(p.x, p.y, p.z);
 
     // set uniforms
@@ -996,12 +998,12 @@ function initGL()
     let dist = from.distance(to);
     log("dist: " + dist);
 
-    buildShadowMapFrustum(FOV_V, 1, 1, 100); // fovY, aspect, near, far
+    buildShadowMapFrustum(FOV_V, 1, LIGHT_N, LIGHT_F); // fovY, aspect, near, far
 
     gl.matrixLightView = Matrix4.lookat(from, to, up);
     gl.matrixLightView.setTranslation(0, 0, -dist);
-    gl.matrixLightProjection = Matrix4.makePerspective(FOV_V, 1, 1, 100);
-    //gl.matrixLightProjection = Matrix4.makeOrthographic(-10, 10, -10, 10, -1, 100);
+    gl.matrixLightProjection = Matrix4.makePerspective(FOV_V, 1, LIGHT_N, LIGHT_F);
+    //gl.matrixLightProjection = Matrix4.makeOrthographic(-10, 10, -10, 10, LIGHT_N, LIGHT_F);
     // normalize matrix for NDC [-1,1] to tex coord [0,1]
     // x' = 0.5 * x + 0.5
     gl.matrixLightNorm = new Matrix4(0.5, 0,   0,   0,
@@ -1377,7 +1379,7 @@ WebGL: Shadow Map
 <br>
 <span>Light Height:</span>
 <div class="flexbox">
-<input class="flexcol1" type="range" name="rangeLightH" min="1" max="10" step="0.1" value="3"><label class="flexcol2" id="labelLightH" class="col3">4</label>
+<input class="flexcol1" type="range" name="rangeLightH" min="1" max="10" step="0.01" value="3"><label class="flexcol2" id="labelLightH" class="col3">4</label>
 </div>
 <br>
 <label><input style="margin-bottom:10px;" type="checkbox" name="checkBlur"> Soften Shadow</label>
