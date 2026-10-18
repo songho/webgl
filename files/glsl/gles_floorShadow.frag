@@ -5,7 +5,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2012-02-09
-// UPDATED: 2026-09-30
+// UPDATED: 2026-10-17
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -172,19 +172,25 @@ void main(void)
     vec3 halfv = normalize(halfVec);
     vec3 light = normalize(lightVec);
 
-    // start with ambient
-    vec3 color = ambient.xyz;
-
     // compute shadow factor, 0 means lit (no shadow)
     vec3 shadowCoord = lsPosition.xyz / lsPosition.w;
     shadowCoord = clamp(shadowCoord, 0.0, 1.0);
     float shadowFactor;
     if(blurEnabled)
+    {
         shadowFactor = computeShadowFactorBlur(shadowCoord);
         //shadowFactor = computeShadowFactorNoiseBlur(shadowCoord);
         //shadowFactor = computeShadowFactorNoise(shadowCoord);
+    }
     else
+    {
         shadowFactor = computeShadowFactor(shadowCoord);
+    }
+
+    float litFactor = 1.0 - shadowFactor;
+
+    // start with ambient
+    vec3 color = ambient.xyz;
 
     // compute diffuse factor using Lambert cosine law
     float dotNL = max(dot(normal, light), 0.0);
@@ -201,7 +207,7 @@ void main(void)
 
     // add spacular
     float dotNH = max(dot(normal, halfv), 0.0);
-    color += pow(1.0 - shadowFactor, 5.0) * pow(dotNH, materialShininess) * materialSpecular.xyz * lightColor.xyz;
+    color += pow(litFactor, 5.0) * pow(dotNH, materialShininess) * materialSpecular.xyz * lightColor.xyz;
 
     // compute attenuation factor for positional light: 1 / (k0 + k1 * d + k2 * (d*d))
     //float attFactor = 1.0 / dot(lightAttenuations, vec3(1.0, lightDistance, lightDistance * lightDistance));

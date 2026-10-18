@@ -24,7 +24,7 @@
 //
 //  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 // CREATED: 2012-01-11
-// UPDATED: 2026-10-03
+// UPDATED: 2026-10-17
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -37,7 +37,7 @@
 const float ZERO = 0.0;
 const float ONE  = 1.0;
 const vec3 SHADOW_COLOR = vec3(0.0, 0.0, 0.0);
-const float SHADOW_ALPHA = 0.5;     // default shadow blend weight
+const float SHADOW_ALPHA = 1.0;     // default shadow blend weight
 const int HALF_KERNEL = 2;          // half range of kernel
 const int KERNEL_COUNT = 25;        // total number of samples in kernel
 const float SPREAD = 1.0;           // texel sampling radius
@@ -199,13 +199,6 @@ void main(void)
     // compute half vector H = (L + V) / |L + V|
     vec3 halfVec = normalize(light + view);
 
-    // start with ambient
-    vec3 color = materialAmbient.xyz;
-
-    // add diffuse portion using Lambert cosine law
-    float dotNL = max(dot(normal, light), ZERO);
-    color += dotNL * materialDiffuse.xyz * lightColor.xyz;
-
     // compute shadow factor, 0 means lit (no shadow)
     vec3 shadowCoord = lsPosition.xyz / lsPosition.w;
     shadowCoord = clamp(shadowCoord, 0.0, 1.0);
@@ -216,14 +209,23 @@ void main(void)
     //shadowFactor = computeShadowFactor(shadowCoord);
 
     // blend shadow
-    color = mix(color, SHADOW_COLOR, shadowFactor);
+    //color = mix(color, SHADOW_COLOR, shadowFactor);
+
+    float litFactor = 1.0 - shadowFactor;
+
+    // start with ambient
+    vec3 color = materialAmbient.xyz;
+
+    // add diffuse portion using Lambert cosine law
+    float dotNL = max(dot(normal, light), ZERO);
+    color += litFactor * dotNL * materialDiffuse.xyz * lightColor.xyz;
 
     // apply texture before specular
     color *= texture2D(map0, texCoord0).rgb;
 
     // add specular portion
     float dotNH = max(dot(normal, halfVec), ZERO);
-    color += pow(1.0 - shadowFactor, 5.0) * pow(dotNH, materialShininess) * materialSpecular.xyz * lightColor.xyz;
+    color += pow(litFactor, 5.0) * pow(dotNH, materialShininess) * materialSpecular.xyz * lightColor.xyz;
 
     // set frag color
     gl_FragColor = vec4(color * attenuation, materialDiffuse.a);  // keep alpha as original material has
