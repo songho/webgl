@@ -250,7 +250,7 @@ function initWebGL(canvasId)
     gl.knot = new TrefoilKnot(gl, 1.5, 0.7, 0.4, 3, 90, 18, false);
     gl.knot.tex = loadTexture(gl, "files/images/grid4096x512.png", true);
     gl.knot.material = new Material(1, 0.2, 0.2, 1);
-    gl.knot.material.ambient.set(0.2, 0, 0, 1);
+    gl.knot.material.ambient.set(0.3, 0, 0, 1);
     log(gl.knot);
 
     // create pillars
@@ -592,7 +592,7 @@ function drawFloor()
     //gl.activeTexture(gl.TEXTURE1);
     //gl.bindTexture(gl.TEXTURE_2D, gl.fboDepth.tex);
 
-    //gl.disable(gl.CULL_FACE);
+    gl.disable(gl.CULL_FACE);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.floor.vboVertex);
     gl.vertexAttribPointer(gl.program.attribute.vertexPosition, 3, gl.FLOAT, false, 40, 0);
@@ -601,7 +601,7 @@ function drawFloor()
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-    //gl.enable(gl.CULL_FACE);
+    gl.enable(gl.CULL_FACE);
 }
 
 function drawFloorForShadow()
@@ -1065,7 +1065,8 @@ function initGL(width, height)
     log();
 
     // floor material
-    gl.materialFloor = new Material(1, 1, 1, 1.0);
+    gl.materialFloor = new Material(0.8, 0.8, 0.8, 1.0);
+    gl.materialFloor.ambient.set(0.2, 0.2, 0.2, 1);
     gl.materialFloor.specular.set(0.1, 0.1, 0.1, 1);
     log("  Floor Material Ambient: " + gl.materialFloor.ambient);
     log("  Floor Material Diffuse: " + gl.materialFloor.diffuse);
