@@ -6,7 +6,7 @@ Testing shadowmap
 
  AUTHOR: Song Ho Ahn (song.ahn@gmail.com)
 CREATED: 2012-09-19
-UPDATED: 2026-10-03
+UPDATED: 2026-10-27
 ===============================================================================
 -->
 
@@ -268,6 +268,7 @@ function initWebGL(canvasId)
     gl.tex1 = loadTexture(gl, "files/images/grid512.png", false);
 
     // init shadowmap projection matrix
+    updateLightMatrix();
     setLightProjection("ortho");
 
     // init array of pointer objects
